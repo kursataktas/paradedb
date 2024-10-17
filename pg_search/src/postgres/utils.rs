@@ -27,25 +27,6 @@ use pgrx::*;
 use std::mem::size_of;
 use std::ptr::null_mut;
 
-const P_NEW: u32 = pg_sys::InvalidBlockNumber;
-const RBM_NORMAL: u32 = pg_sys::ReadBufferMode::RBM_NORMAL;
-// The first block of the index is the metadata block, which is essentially a "map" for
-// how the rest of the index is laid out in block storage.
-// It is our responsibility to ensure that the metadata block is the first block by creating it immediately
-// when the index is built.
-const METADATA_BLOCKNO: pg_sys::BlockNumber = 0;
-
-pub(crate) struct MetaPageSpecialData {
-    next_blockno: pg_sys::BlockNumber,
-    tantivy_meta_blockno: pg_sys::BlockNumber,
-    tantivy_managed_blockno: pg_sys::BlockNumber,
-}
-
-pub(crate) struct TantivyMetaSpecialData {
-    next_blockno: pg_sys::BlockNumber,
-    len: u32,
-}
-
 /// Finds and returns the first `USING bm25` index on the specified relation, or [`None`] if there
 /// aren't any
 pub fn locate_bm25_index(heaprelid: pg_sys::Oid) -> Option<PgRelation> {
