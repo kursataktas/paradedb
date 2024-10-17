@@ -29,8 +29,8 @@ use std::ptr::null_mut;
 
 const P_NEW: u32 = pg_sys::InvalidBlockNumber;
 const RBM_NORMAL: u32 = pg_sys::ReadBufferMode::RBM_NORMAL;
-const METADATA_BLOCKNO: pg_sys::BlockNumber = 0;
-const MANAGED_BLOCKNO: pg_sys::BlockNumber = 1;
+const MANAGED_BLOCKNO: pg_sys::BlockNumber = 0;
+const METADATA_BLOCKNO: pg_sys::BlockNumber = 1;
 
 pub(crate) struct BM25SpecialData {
     next_blockno: pg_sys::BlockNumber,
