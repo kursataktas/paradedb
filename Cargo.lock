@@ -2804,14 +2804,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ownedbytes"
-version = "0.7.0"
-source = "git+https://github.com/paradedb/tantivy.git?rev=33be46c#33be46c8c68505e10fc262ac22a9e71f216e45fa"
-dependencies = [
- "stable_deref_trait",
-]
-
-[[package]]
 name = "owo-colors"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2976,6 +2968,10 @@ name = "pg_search"
 version = "0.11.1"
 dependencies = [
  "anyhow",
+ "approx",
+ "async-std",
+ "bigdecimal 0.4.5",
+ "bincode",
  "chrono",
  "crossbeam",
  "derive_more",
@@ -2997,8 +2993,8 @@ dependencies = [
  "serde_json",
  "strum",
  "strum_macros",
- "tantivy 0.23.0",
- "tantivy-common 0.7.0",
+ "tantivy",
+ "tantivy-common",
  "tempfile",
  "thiserror",
  "tokenizers",
@@ -4507,63 +4503,13 @@ dependencies = [
  "serde_json",
  "sketches-ddsketch",
  "smallvec",
- "tantivy-bitpacker 0.6.0",
- "tantivy-columnar 0.3.0",
- "tantivy-common 0.7.0",
+ "tantivy-bitpacker",
+ "tantivy-columnar",
+ "tantivy-common",
  "tantivy-fst",
- "tantivy-query-grammar 0.22.0",
- "tantivy-stacker 0.3.0",
- "tantivy-tokenizer-api 0.3.0",
- "tempfile",
- "thiserror",
- "time",
- "uuid",
- "winapi",
-]
-
-[[package]]
-name = "tantivy"
-version = "0.23.0"
-source = "git+https://github.com/paradedb/tantivy.git?rev=33be46c#33be46c8c68505e10fc262ac22a9e71f216e45fa"
-dependencies = [
- "aho-corasick",
- "arc-swap",
- "base64 0.22.1",
- "bitpacking",
- "byteorder",
- "census",
- "crc32fast",
- "crossbeam-channel",
- "downcast-rs",
- "fastdivide",
- "fnv",
- "fs4",
- "htmlescape",
- "hyperloglogplus",
- "itertools 0.13.0",
- "levenshtein_automata",
- "log",
- "lru",
- "lz4_flex",
- "measure_time",
- "memmap2",
- "once_cell",
- "oneshot",
- "rayon",
- "regex",
- "rust-stemmers",
- "rustc-hash",
- "serde",
- "serde_json",
- "sketches-ddsketch",
- "smallvec",
- "tantivy-bitpacker 0.6.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
- "tantivy-columnar 0.3.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
- "tantivy-common 0.7.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
- "tantivy-fst",
- "tantivy-query-grammar 0.22.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
- "tantivy-stacker 0.3.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
- "tantivy-tokenizer-api 0.3.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
+ "tantivy-query-grammar",
+ "tantivy-stacker",
+ "tantivy-tokenizer-api",
  "tempfile",
  "thiserror",
  "time",
@@ -4579,14 +4525,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tantivy-bitpacker"
-version = "0.6.0"
-source = "git+https://github.com/paradedb/tantivy.git?rev=33be46c#33be46c8c68505e10fc262ac22a9e71f216e45fa"
-dependencies = [
- "bitpacking",
-]
-
-[[package]]
 name = "tantivy-columnar"
 version = "0.3.0"
 dependencies = [
@@ -4594,25 +4532,10 @@ dependencies = [
  "fastdivide",
  "itertools 0.13.0",
  "serde",
- "tantivy-bitpacker 0.6.0",
- "tantivy-common 0.7.0",
- "tantivy-sstable 0.3.0",
- "tantivy-stacker 0.3.0",
-]
-
-[[package]]
-name = "tantivy-columnar"
-version = "0.3.0"
-source = "git+https://github.com/paradedb/tantivy.git?rev=33be46c#33be46c8c68505e10fc262ac22a9e71f216e45fa"
-dependencies = [
- "downcast-rs",
- "fastdivide",
- "itertools 0.13.0",
- "serde",
- "tantivy-bitpacker 0.6.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
- "tantivy-common 0.7.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
- "tantivy-sstable 0.3.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
- "tantivy-stacker 0.3.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
+ "tantivy-bitpacker",
+ "tantivy-common",
+ "tantivy-sstable",
+ "tantivy-stacker",
 ]
 
 [[package]]
@@ -4621,19 +4544,7 @@ version = "0.7.0"
 dependencies = [
  "async-trait",
  "byteorder",
- "ownedbytes 0.7.0",
- "serde",
- "time",
-]
-
-[[package]]
-name = "tantivy-common"
-version = "0.7.0"
-source = "git+https://github.com/paradedb/tantivy.git?rev=e4e9eb5#e4e9eb52ce8bf2901652e8f9a947f43756f9aa15"
-dependencies = [
- "async-trait",
- "byteorder",
- "ownedbytes 0.7.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
+ "ownedbytes",
  "serde",
  "time",
 ]
@@ -4657,30 +4568,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "tantivy-query-grammar"
-version = "0.22.0"
-source = "git+https://github.com/paradedb/tantivy.git?rev=33be46c#33be46c8c68505e10fc262ac22a9e71f216e45fa"
-dependencies = [
- "nom",
-]
-
-[[package]]
 name = "tantivy-sstable"
 version = "0.3.0"
 dependencies = [
- "tantivy-bitpacker 0.6.0",
- "tantivy-common 0.7.0",
- "tantivy-fst",
- "zstd 0.13.2",
-]
-
-[[package]]
-name = "tantivy-sstable"
-version = "0.3.0"
-source = "git+https://github.com/paradedb/tantivy.git?rev=33be46c#33be46c8c68505e10fc262ac22a9e71f216e45fa"
-dependencies = [
- "tantivy-bitpacker 0.6.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
- "tantivy-common 0.7.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
+ "tantivy-bitpacker",
+ "tantivy-common",
  "tantivy-fst",
  "zstd 0.13.2",
 ]
@@ -4691,30 +4583,12 @@ version = "0.3.0"
 dependencies = [
  "murmurhash32",
  "rand_distr",
- "tantivy-common 0.7.0",
-]
-
-[[package]]
-name = "tantivy-stacker"
-version = "0.3.0"
-source = "git+https://github.com/paradedb/tantivy.git?rev=e4e9eb5#e4e9eb52ce8bf2901652e8f9a947f43756f9aa15"
-dependencies = [
- "murmurhash32",
- "rand_distr",
- "tantivy-common 0.7.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
+ "tantivy-common",
 ]
 
 [[package]]
 name = "tantivy-tokenizer-api"
 version = "0.3.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "tantivy-tokenizer-api"
-version = "0.3.0"
-source = "git+https://github.com/paradedb/tantivy.git?rev=e4e9eb5#e4e9eb52ce8bf2901652e8f9a947f43756f9aa15"
 dependencies = [
  "serde",
 ]
@@ -4905,7 +4779,7 @@ dependencies = [
  "serde_json",
  "strum",
  "strum_macros",
- "tantivy 0.23.0 (git+https://github.com/paradedb/tantivy.git?rev=33be46c)",
+ "tantivy",
  "tracing",
 ]
 
