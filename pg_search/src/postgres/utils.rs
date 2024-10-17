@@ -24,6 +24,18 @@ use anyhow::{anyhow, Result};
 use chrono::{NaiveDate, NaiveTime};
 use pgrx::itemptr::{item_pointer_get_both, item_pointer_set_all};
 use pgrx::*;
+use std::mem::size_of;
+use std::ptr::null_mut;
+
+const P_NEW: u32 = pg_sys::InvalidBlockNumber;
+const RBM_NORMAL: u32 = pg_sys::ReadBufferMode::RBM_NORMAL;
+const METADATA_BLOCKNO: pg_sys::BlockNumber = 0;
+const MANAGED_BLOCKNO: pg_sys::BlockNumber = 1;
+
+pub(crate) struct BM25SpecialData {
+    next_blockno: pg_sys::BlockNumber,
+    len: u32,
+}
 
 /// Finds and returns the first `USING bm25` index on the specified relation, or [`None`] if there
 /// aren't any
