@@ -2971,7 +2971,6 @@ dependencies = [
  "approx",
  "async-std",
  "bigdecimal 0.4.5",
- "bincode",
  "chrono",
  "crossbeam",
  "derive_more",
