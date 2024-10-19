@@ -4556,6 +4556,7 @@ dependencies = [
  "async-trait",
  "byteorder",
  "ownedbytes",
+ "pgrx",
  "serde",
  "time",
 ]
