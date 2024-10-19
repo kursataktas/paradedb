@@ -41,6 +41,7 @@ use tantivy::{query::QueryParser, Executor, Index};
 use thiserror::Error;
 use tokenizers::{create_normalizer_manager, create_tokenizer_manager};
 use tracing::trace;
+use tantivy::indexer::SingleSegmentIndexWriter;
 
 /// PostgreSQL operates in a process-per-client model, meaning every client connection
 /// to PostgreSQL results in a new backend process being spawned on the PostgreSQL server.
@@ -219,7 +220,7 @@ impl SearchIndex {
 
     pub fn insert(
         &self,
-        writer: &SearchIndexWriter,
+        writer: &mut SearchIndexWriter,
         document: SearchDocument,
     ) -> Result<(), SearchIndexError> {
         // the index is about to change, and that requires our transaction callbacks be registered

@@ -139,7 +139,7 @@ unsafe fn aminsert_internal(
         let state = &*init_insert_state(index_relation, index_info, WriterResources::Statement);
         let tupdesc = PgTupleDesc::from_pg_unchecked((*index_relation).rd_att);
         let search_index = &state.index;
-        let writer = &state.writer;
+        let mut writer = &mut state.writer;
         let search_document =
             row_to_search_document(*ctid, &tupdesc, values, isnull, &search_index.schema)
                 .unwrap_or_else(|err| {
