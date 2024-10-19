@@ -303,7 +303,7 @@ unsafe fn build_callback_internal(
         WriterResources::CreateIndex,
     );
     let search_index = &(*insert_state).index;
-    let writer = &(*insert_state).writer;
+    let mut writer = &mut (*insert_state).writer;
     let schema = &(*insert_state).index.schema;
 
     // In the block below, we switch to the memory context we've defined on our build
