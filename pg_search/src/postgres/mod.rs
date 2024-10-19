@@ -24,7 +24,6 @@ mod insert;
 pub mod options;
 mod range;
 mod scan;
-pub mod storage;
 mod vacuum;
 mod validate;
 
@@ -32,6 +31,7 @@ pub mod customscan;
 pub mod datetime;
 pub mod index;
 mod parallel;
+pub mod storage;
 pub mod transaction;
 pub mod types;
 pub mod utils;
