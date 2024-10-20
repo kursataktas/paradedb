@@ -3007,9 +3007,7 @@ dependencies = [
 
 [[package]]
 name = "pgrx"
-version = "0.12.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb67c795a2718ecd599be132582fbc6b714ed9e15a23291bf08b565bab2be28e"
+version = "0.12.6"
 dependencies = [
  "atomic-traits",
  "bitflags 2.6.0",
@@ -3031,9 +3029,7 @@ dependencies = [
 
 [[package]]
 name = "pgrx-bindgen"
-version = "0.12.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "433d56944dc948c6033cb38198895ff4a36432e2343c3b9891a0ec94d2913ef1"
+version = "0.12.6"
 dependencies = [
  "bindgen 0.70.1",
  "cc",
@@ -3049,9 +3045,7 @@ dependencies = [
 
 [[package]]
 name = "pgrx-macros"
-version = "0.12.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9160f3affc241fa473a5f9e3bceca7cc8923132cbf81629f9851a01b81c674bf"
+version = "0.12.6"
 dependencies = [
  "pgrx-sql-entity-graph",
  "proc-macro2",
@@ -3061,9 +3055,7 @@ dependencies = [
 
 [[package]]
 name = "pgrx-pg-config"
-version = "0.12.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a0703033b0d1269ca9facdb436b439e3a92e303a6ea5c13107dd8b228c4c294"
+version = "0.12.6"
 dependencies = [
  "cargo_toml",
  "eyre",
@@ -3079,9 +3071,7 @@ dependencies = [
 
 [[package]]
 name = "pgrx-pg-sys"
-version = "0.12.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b65132c32c8f90f4f6fa66d6b085cbd1657c95ea70e927104737f578ea9b7190"
+version = "0.12.6"
 dependencies = [
  "cee-scape",
  "libc",
@@ -3094,9 +3084,7 @@ dependencies = [
 
 [[package]]
 name = "pgrx-sql-entity-graph"
-version = "0.12.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d1e11e53d544d2e84860493d0f983c9c58b927d1f24ddcd907602f89e3cb887"
+version = "0.12.6"
 dependencies = [
  "convert_case 0.6.0",
  "eyre",
@@ -3106,6 +3094,28 @@ dependencies = [
  "syn 2.0.79",
  "thiserror",
  "unescape",
+]
+
+[[package]]
+name = "pgrx-tests"
+version = "0.12.6"
+dependencies = [
+ "clap-cargo",
+ "eyre",
+ "libc",
+ "owo-colors",
+ "paste",
+ "pgrx",
+ "pgrx-macros",
+ "pgrx-pg-config",
+ "postgres",
+ "proptest",
+ "rand",
+ "regex",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "thiserror",
 ]
 
 [[package]]
