@@ -237,3 +237,9 @@ pub fn convert_pg_date_string(typeoid: PgOid, date_string: &str) -> tantivy::Dat
         _ => panic!("Unsupported typeoid: {typeoid:?}"),
     }
 }
+
+// access/htup_details.h
+pub unsafe fn max_heap_tuple_size() -> usize {
+    pg_sys::BLCKSZ as usize
+        - pg_sys::MAXALIGN(size_of::<pg_sys::PageHeaderData>() + size_of::<pg_sys::ItemIdData>())
+}
