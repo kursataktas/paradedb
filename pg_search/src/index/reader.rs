@@ -169,6 +169,7 @@ impl SearchIndexReader {
             .reload_policy(tantivy::ReloadPolicy::Manual)
             .try_into()?;
         let searcher = reader.searcher();
+        pgrx::info!("reader {:?}", searcher.index().searchable_segments()?);
         Ok(SearchIndexReader {
             searcher,
             schema: schema.clone(),
@@ -258,34 +259,30 @@ impl SearchIndexReader {
         executor: &'static Executor,
         query: &dyn Query,
     ) -> SearchResults {
-        let (sender, receiver) = crossbeam::channel::unbounded();
-        let collector = collector::ChannelCollector::new(need_scores, sender, key_field);
-        let searcher = self.searcher.clone();
-        let schema = self.schema.schema.clone();
+        // match (
+        //     config.limit_rows,
+        //     config.stable_sort.unwrap_or(true),
+        //     config.order_by_field.clone(),
+        // ) {
+        //     // no limit, no stable sorting, and no sort field
+        //     //
+        //     // this we can use a channel to stream the results and also elide doing key lookups.
+        //     // this is our "fast path"
+        //     (None, false, None) => SearchResults::FastPath(
+        //         self.search_via_channel(executor, include_key, config, query)
+        //             .into_iter()
+        //             .flatten(),
+        //     ),
 
-        let owned_query = query.box_clone();
-        std::thread::spawn(move || {
-            searcher
-                .search_with_executor(
-                    &owned_query,
-                    &collector,
-                    executor,
-                    if need_scores {
-                        tantivy::query::EnableScoring::Enabled {
-                            searcher: &searcher,
-                            statistics_provider: &searcher,
-                        }
-                    } else {
-                        tantivy::query::EnableScoring::Disabled {
-                            schema: &schema,
-                            searcher_opt: Some(&searcher),
-                        }
-                    },
-                )
-                .expect("failed to search")
-        });
-
-        SearchResults::Channel(receiver.into_iter().flatten())
+        //     // at least one of limit, stable sorting, or a sort field, so we gotta do it all,
+        //     // including retrieving the key field
+        //     _ => {
+        //         let results = self.search_with_top_docs(executor, true, config, query);
+        //         SearchResults::AllFeatures(results.len(), results.into_iter())
+        //     }
+        // }
+        let results = self.search_with_top_docs(executor, true, config, query);
+        SearchResults::AllFeatures(results.len(), results.into_iter())
     }
 
     /// Search a specific index segment for matching documents.
@@ -433,6 +430,7 @@ impl SearchIndexReader {
             }
         });
 
+        pgrx::info!("top n");
         let results = self
             .searcher
             .search_with_executor(
