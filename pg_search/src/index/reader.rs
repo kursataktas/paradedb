@@ -169,7 +169,6 @@ impl SearchIndexReader {
             .reload_policy(tantivy::ReloadPolicy::Manual)
             .try_into()?;
         let searcher = reader.searcher();
-        pgrx::info!("reader {:?}", searcher.index().searchable_segments()?);
         Ok(SearchIndexReader {
             searcher,
             schema: schema.clone(),
@@ -430,7 +429,6 @@ impl SearchIndexReader {
             }
         });
 
-        pgrx::info!("top n");
         let results = self
             .searcher
             .search_with_executor(

@@ -106,7 +106,7 @@ impl SearchIndex {
         let (_, memory_budget) = resources.resources();
         let underlying_writer = SingleSegmentIndexWriter::new(self.underlying_index.clone(), memory_budget)?;
         Ok(SearchIndexWriter {
-            underlying_writer: Some(underlying_writer).into(),
+            underlying_writer: Some(underlying_writer),
         })
     }
 
