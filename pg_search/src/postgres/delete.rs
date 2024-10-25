@@ -16,6 +16,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use crate::index::WriterResources;
+use crate::index::channel::directory::{ChannelDirectory, ChannelRequest, ChannelResponse};
 use crate::postgres::index::open_search_index;
 use crate::postgres::options::SearchIndexCreateOptions;
 use pgrx::{pg_sys::ItemPointerData, *};
@@ -30,6 +31,15 @@ pub extern "C" fn ambulkdelete(
     let info = unsafe { PgBox::from_pg(info) };
     let mut stats = unsafe { PgBox::from_pg(stats) };
     let index_relation = unsafe { PgRelation::from_pg(info.index) };
+
+    let request_channel = crossbeam::channel::unbounded::<ChannelRequest>();
+    let response_channel = crossbeam::channel::unbounded::<ChannelResponse>();
+
+    let channel_directory = ChannelDirectory::new(
+        request_channel,
+        response_channel,
+        index_relation.oid().into(),
+    );
 
     let search_index =
         open_search_index(&index_relation).expect("should be able to open search index");

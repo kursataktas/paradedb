@@ -29,19 +29,19 @@ pub enum ChannelResponse {
 #[derive(Clone, Debug)]
 pub struct ChannelDirectory {
     request_sender: Sender<ChannelRequest>,
-    request_receiver: Receiver<ChannelResponse>,
-    response_sender: Sender<ChannelRequest>,
+    request_receiver: Receiver<ChannelRequest>,
+    response_sender: Sender<ChannelResponse>,
     response_receiver: Receiver<ChannelResponse>,
-    relation_oid: u32
+    relation_oid: u32,
 }
 
 // A directory that actually forwards all read/write requests to a channel
 // This channel is used to communicate with the actual storage implementation
 impl ChannelDirectory {
     pub fn new(
-        request_channel: (Sender<ChannelRequest>, Receiver<ChannelResponse>),
-        response_channel: (Sender<ChannelRequest>, Receiver<ChannelResponse>),
-        relation_oid: u32
+        request_channel: (Sender<ChannelRequest>, Receiver<ChannelRequest>),
+        response_channel: (Sender<ChannelResponse>, Receiver<ChannelResponse>),
+        relation_oid: u32,
     ) -> Self {
         let (request_sender, request_receiver) = request_channel;
         let (response_sender, response_receiver) = response_channel;
@@ -51,7 +51,7 @@ impl ChannelDirectory {
             response_receiver,
             response_sender,
             request_receiver,
-            relation_oid
+            relation_oid,
         }
     }
 }
@@ -63,7 +63,7 @@ impl Directory for ChannelDirectory {
                 self.relation_oid,
                 path,
                 self.request_sender.clone(),
-                self.request_receiver.clone(),
+                self.response_receiver.clone(),
             )
             .map_err(|e| {
                 OpenReadError::wrap_io_error(
@@ -80,7 +80,7 @@ impl Directory for ChannelDirectory {
                 self.relation_oid,
                 path,
                 self.request_sender.clone(),
-                self.request_receiver.clone(),
+                self.response_receiver.clone(),
             )
         })))
     }
