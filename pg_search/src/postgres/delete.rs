@@ -20,6 +20,8 @@ use crate::index::channel::directory::{ChannelDirectory, ChannelRequest, Channel
 use crate::postgres::index::open_search_index;
 use crate::postgres::options::SearchIndexCreateOptions;
 use pgrx::{pg_sys::ItemPointerData, *};
+use tantivy::index::Index;
+use tantivy::indexer::IndexWriter;
 
 #[pg_guard]
 pub extern "C" fn ambulkdelete(
@@ -40,6 +42,11 @@ pub extern "C" fn ambulkdelete(
         response_channel,
         index_relation.oid().into(),
     );
+    let index = Index::open(channel_directory).expect("index should be openable");
+    // TODO: Make this configurable
+    let writer: IndexWriter = index
+        .writer(500_000_000)
+        .expect("writer should be openable");
 
     let search_index =
         open_search_index(&index_relation).expect("should be able to open search index");
