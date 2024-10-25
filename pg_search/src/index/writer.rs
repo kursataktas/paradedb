@@ -86,6 +86,7 @@ impl Directory for BlockingDirectory {
 
     fn atomic_read(&self, path: &Path) -> result::Result<Vec<u8>, OpenReadError> {
         let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
+        pgrx::info!("looking for file: {:?}", path);
         let data = match path.to_str().unwrap().ends_with("meta.json") {
             true => unsafe { directory.read_meta() },
             false => unsafe { directory.read_managed() },
