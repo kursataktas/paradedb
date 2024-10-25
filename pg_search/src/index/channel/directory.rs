@@ -1,6 +1,6 @@
-use crossbeam::channel::{unbounded, Receiver, Sender};
+use crossbeam::channel::{Receiver, Sender};
 use std::path::{Path, PathBuf};
-use std::{io, result};
+use std::{io, ops::Range, result};
 use tantivy::directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError};
 
 use crate::postgres::storage::segment_handle::SegmentHandle;
@@ -8,9 +8,9 @@ use crate::postgres::storage::segment_handle::SegmentHandle;
 pub enum ChannelRequest {
     AtomicRead(PathBuf),
     AtomicWrite(PathBuf, Vec<u8>),
-    SegmentRead(PathBuf),
+    SegmentRead(PathBuf, Range<usize>, SegmentHandle),
     SegmentWrite(PathBuf, Vec<u8>),
-    GetFileHandle(PathBuf),
+    GetSegmentHandle(PathBuf),
 }
 
 #[derive(Debug)]
