@@ -72,12 +72,11 @@ impl AtomicDirectory {
             .get_buffer(blockno, pg_sys::BUFFER_LOCK_EXCLUSIVE);
         let page = pg_sys::BufferGetPage(buffer);
 
-        pg_sys::PageAddItemExtended(
+        pg_sys::PageIndexTupleOverwrite(
             page,
+            pg_sys::FirstOffsetNumber,
             data.as_ptr() as pg_sys::Item,
             data.len(),
-            pg_sys::FirstOffsetNumber,
-            0,
         );
         pg_sys::MarkBufferDirty(buffer);
         pg_sys::UnlockReleaseBuffer(buffer);

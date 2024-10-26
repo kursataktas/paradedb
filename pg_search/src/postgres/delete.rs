@@ -20,6 +20,7 @@ use crate::index::channel::directory::{
 };
 use crate::index::reader::FFType;
 use crate::index::writer::BlockingDirectory;
+use crate::index::WriterResources;
 use crate::postgres::index::open_search_index;
 use crate::postgres::storage::segment_handle::SegmentHandle;
 use crate::postgres::storage::segment_reader::SegmentReader;
@@ -60,7 +61,10 @@ pub extern "C" fn ambulkdelete(
             .reload_policy(tantivy::ReloadPolicy::Manual)
             .try_into()
             .unwrap();
-        let mut writer: IndexWriter = channel_index.writer(500_000_000).unwrap();
+        let (parallelism, memory_budget) = WriterResources::Vacuum.resources();
+        let mut writer: IndexWriter = channel_index
+            .writer_with_num_threads(parallelism.into(), memory_budget)
+            .unwrap();
 
         for segment_reader in reader.searcher().segment_readers() {
             let fast_fields = segment_reader.fast_fields();
@@ -111,8 +115,6 @@ pub extern "C" fn ambulkdelete(
         };
     }
 
-    // stats.pages_deleted += deleted;
-    // stats.num_pages += not_deleted;
-
+    // TODO: Populate stats
     stats.into_pg()
 }

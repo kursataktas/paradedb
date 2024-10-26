@@ -24,6 +24,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use once_cell::sync::Lazy;
+use pgrx::pg_sys;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -39,6 +40,7 @@ use thiserror::Error;
 
 use super::directory::{SearchDirectoryError, SearchFs, WriterDirectory};
 use crate::postgres::storage::atomic_directory::AtomicDirectory;
+use crate::postgres::storage::buffer::BufferCache;
 use crate::postgres::storage::segment_handle::SegmentHandle;
 use crate::postgres::storage::segment_reader::SegmentReader;
 use crate::postgres::storage::segment_writer::SegmentWriter;
@@ -103,7 +105,26 @@ impl Directory for BlockingDirectory {
     }
 
     fn delete(&self, path: &Path) -> result::Result<(), DeleteError> {
-        todo!("directory delete");
+        unsafe {
+            let segment_handle = SegmentHandle::open(self.relation_oid, &path).unwrap();
+            if let Some(segment_handle) = segment_handle {
+                let cache = BufferCache::open(self.relation_oid);
+                let blocknos = segment_handle.internal().blocks();
+                for blockno in blocknos {
+                    let buffer = cache.get_buffer(blockno, pg_sys::BUFFER_LOCK_EXCLUSIVE);
+                    let page = pg_sys::BufferGetPage(buffer);
+
+                    assert!(!pg_sys::PageIsNew(page));
+                    assert!(pg_sys::PageGetMaxOffsetNumber(page) == pg_sys::FirstOffsetNumber);
+
+                    pg_sys::PageIndexTupleDelete(page, pg_sys::FirstOffsetNumber);
+                    cache.record_free_index_page(blockno);
+                    pg_sys::MarkBufferDirty(buffer);
+                    pg_sys::UnlockReleaseBuffer(buffer);
+                }
+            }
+        }
+        Ok(())
     }
 
     fn exists(&self, path: &Path) -> Result<bool, OpenReadError> {

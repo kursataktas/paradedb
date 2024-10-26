@@ -204,29 +204,30 @@ impl ChannelRequestHandler {
         for message in self.receiver.iter() {
             match message {
                 ChannelRequest::AtomicRead(path) => {
-                    let data = self.directory.atomic_read(&path).unwrap();
+                    let data = self.directory.atomic_read(&path)?;
                     self.sender.send(ChannelResponse::Bytes(data))?
                 }
                 ChannelRequest::AtomicWrite(path, data) => {
-                    self.directory.atomic_write(&path, &data).unwrap();
+                    self.directory.atomic_write(&path, &data)?;
                     self.sender.send(ChannelResponse::AtomicWriteAck)?;
                 }
                 ChannelRequest::GetSegmentHandle(path) => {
-                    let handle = unsafe { SegmentHandle::open(self.relation_oid, &path).unwrap() };
+                    let handle = unsafe { SegmentHandle::open(self.relation_oid, &path)? };
                     self.sender.send(ChannelResponse::SegmentHandle(handle))?;
                 }
                 ChannelRequest::SegmentRead(path, range, handle) => {
                     let reader = SegmentReader::new(self.relation_oid, &path, handle);
-                    let data = reader.read_bytes(range).unwrap();
+                    let data = reader.read_bytes(range)?;
                     self.sender
                         .send(ChannelResponse::Bytes(data.as_slice().to_owned()))?;
                 }
                 ChannelRequest::SegmentWrite(path, data) => {
                     let mut writer = unsafe { SegmentWriter::new(self.relation_oid, &path) };
-                    writer.write_all(data.get_ref()).unwrap();
+                    writer.write_all(data.get_ref())?;
                     self.sender.send(ChannelResponse::SegmentWriteAck)?;
                 }
                 ChannelRequest::SegmentDelete(path) => {
+                    self.directory.delete(&path)?;
                     self.sender.send(ChannelResponse::SegmentDeleteAck)?;
                 }
                 ChannelRequest::ShouldDeleteCtids(ctids) => {
