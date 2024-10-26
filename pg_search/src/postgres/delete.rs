@@ -17,12 +17,16 @@
 
 use crate::index::WriterResources;
 use crate::index::channel::directory::{ChannelDirectory, ChannelRequest, ChannelResponse};
+use crate::index::writer::BlockingDirectory;
 use crate::index::SearchIndex;
 use crate::postgres::index::open_search_index;
+use crate::postgres::storage::segment_handle::SegmentHandle;
+use crate::postgres::storage::segment_reader::SegmentReader;
 use pgrx::{pg_sys::ItemPointerData, *};
+use tantivy::directory::FileHandle;
 use tantivy::index::Index;
 use tantivy::indexer::IndexWriter;
-use tantivy::IndexReader;
+use tantivy::{Directory, IndexReader};
 
 #[pg_guard]
 pub extern "C" fn ambulkdelete(
@@ -39,9 +43,12 @@ pub extern "C" fn ambulkdelete(
         open_search_index(&index_relation).expect("should be able to open search index");
     let request_channel = crossbeam::channel::unbounded::<ChannelRequest>();
     let response_channel = crossbeam::channel::unbounded::<ChannelResponse>();
+    let request_channel_clone = request_channel.clone();
+    let response_channel_clone = response_channel.clone();
 
     std::thread::spawn(move || {
-        let channel_directory = ChannelDirectory::new(request_channel, response_channel, index_oid);
+        let channel_directory =
+            ChannelDirectory::new(request_channel_clone, response_channel_clone, index_oid);
         let underlying_index = Index::open(channel_directory).expect("channel index should open");
         let channel_index = SearchIndex {
             underlying_index,
@@ -55,6 +62,42 @@ pub extern "C" fn ambulkdelete(
             .get_writer()
             .unwrap_or_else(|err| panic!("error loading index writer in bulkdelete: {err}"));
     });
+
+    let blocking_directory = BlockingDirectory::new(index_oid);
+    for message in request_channel.1.iter() {
+        match message {
+            ChannelRequest::AtomicRead(path) => {
+                let data = blocking_directory.atomic_read(&path).unwrap();
+                response_channel
+                    .0
+                    .send(ChannelResponse::Bytes(data))
+                    .unwrap();
+            }
+            ChannelRequest::AtomicWrite(path, data) => {
+                blocking_directory.atomic_write(&path, &data).unwrap();
+                response_channel
+                    .0
+                    .send(ChannelResponse::AtomicWriteAck)
+                    .unwrap();
+            }
+            ChannelRequest::GetSegmentHandle(path) => {
+                let handle = unsafe { SegmentHandle::open(index_oid, &path).unwrap() };
+                response_channel
+                    .0
+                    .send(ChannelResponse::SegmentHandle(handle))
+                    .unwrap();
+            }
+            ChannelRequest::SegmentRead(path, range, handle) => {
+                let reader = SegmentReader::new(index_oid, &path, handle);
+                let data = reader.read_bytes(range).unwrap();
+                response_channel
+                    .0
+                    .send(ChannelResponse::Bytes(data.as_slice().to_owned()))
+                    .unwrap();
+            }
+            message => panic!("unexpected message in bulkdelete thread: {:?}", message),
+        }
+    }
 
     if stats.is_null() {
         stats = unsafe {

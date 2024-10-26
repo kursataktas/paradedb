@@ -39,6 +39,7 @@ use thiserror::Error;
 
 use super::directory::{SearchDirectoryError, SearchFs, WriterDirectory};
 use crate::postgres::storage::atomic_directory::AtomicDirectory;
+use crate::postgres::storage::segment_handle::SegmentHandle;
 use crate::postgres::storage::segment_reader::SegmentReader;
 use crate::postgres::storage::segment_writer::SegmentWriter;
 
@@ -58,14 +59,17 @@ impl BlockingDirectory {
 
 impl Directory for BlockingDirectory {
     fn get_file_handle(&self, path: &Path) -> Result<Arc<dyn FileHandle>, OpenReadError> {
-        Ok(Arc::new(unsafe {
-            SegmentReader::new(self.relation_oid, path).map_err(|e| {
-                OpenReadError::wrap_io_error(
-                    io::Error::new(io::ErrorKind::Other, format!("{:?}", e)),
-                    path.to_path_buf(),
-                )
-            })?
-        }))
+        let handle = unsafe {
+            SegmentHandle::open(self.relation_oid, path)
+                .unwrap()
+                .unwrap()
+        };
+
+        Ok(Arc::new(SegmentReader::new(
+            self.relation_oid,
+            path,
+            handle,
+        )))
     }
 
     fn open_write(&self, path: &Path) -> result::Result<WritePtr, OpenWriteError> {
@@ -86,7 +90,6 @@ impl Directory for BlockingDirectory {
 
     fn atomic_read(&self, path: &Path) -> result::Result<Vec<u8>, OpenReadError> {
         let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
-        pgrx::info!("looking for file: {:?}", path);
         let data = match path.to_str().unwrap().ends_with("meta.json") {
             true => unsafe { directory.read_meta() },
             false => unsafe { directory.read_managed() },
