@@ -1,16 +1,12 @@
 use anyhow::Result;
 use crossbeam::channel::{Receiver, Sender};
-use pgrx::*;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::slice::from_raw_parts;
 use tantivy::directory::FileHandle;
 use tantivy::directory::OwnedBytes;
 use tantivy::HasLen;
 
-use crate::postgres::storage::buffer::BufferCache;
 use crate::postgres::storage::segment_handle::SegmentHandle;
-use crate::postgres::utils::max_heap_tuple_size;
 
 use super::directory::{ChannelRequest, ChannelResponse};
 

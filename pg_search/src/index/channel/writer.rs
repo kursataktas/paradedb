@@ -1,13 +1,8 @@
 use crossbeam::channel::{Receiver, Sender};
-use pgrx::*;
-use serde::{Deserialize, Serialize};
-use std::io::{Cursor, Read, Result, Seek, Write};
+use std::io::{Cursor, Result, Write};
 use std::path::{Path, PathBuf};
 use tantivy::directory::{AntiCallToken, TerminatingWrite};
 
-use crate::postgres::storage::buffer::BufferCache;
-use crate::postgres::storage::segment_handle::{SegmentHandle, SegmentHandleInternal};
-use crate::postgres::utils::max_heap_tuple_size;
 
 use super::directory::{ChannelRequest, ChannelResponse};
 
