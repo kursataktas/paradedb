@@ -60,12 +60,12 @@ pub extern "C" fn amvacuumcleanup(
     // then directly taking control of the underlying_writer and waiting for the merge threads
     // to complete
     writer.commit().expect("commit should succeed");
-    writer
-        .underlying_writer
-        .take()
-        .unwrap()
-        .wait_merging_threads()
-        .expect("wait_merging_threads() should succeed");
+    // writer
+    //     .underlying_writer
+    //     .take()
+    //     .unwrap()
+    //     .wait_merging_threads()
+    //     .expect("wait_merging_threads() should succeed");
 
     stats
 }

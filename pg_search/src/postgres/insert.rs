@@ -143,7 +143,7 @@ unsafe fn aminsert_internal(
     index_info: *mut pg_sys::IndexInfo,
 ) -> bool {
     let result = catch_unwind(|| {
-        let state = &*init_insert_state(index_relation, index_info, WriterResources::Statement);
+        let state = &mut *init_insert_state(index_relation, index_info, WriterResources::Statement);
         let tupdesc = PgTupleDesc::from_pg_unchecked((*index_relation).rd_att);
         let search_index = &state.index;
         let writer = state.writer.as_mut().expect("writer should not be null");

@@ -44,9 +44,7 @@ use tracing::trace;
 
 /// PostgreSQL operates in a process-per-client model, meaning every client connection
 /// to PostgreSQL results in a new backend process being spawned on the PostgreSQL server.
-pub static mut SEARCH_EXECUTOR: Lazy<Executor> = Lazy::new(|| {
-    Executor::single_thread()
-});
+pub static mut SEARCH_EXECUTOR: Lazy<Executor> = Lazy::new(|| Executor::single_thread());
 
 pub enum WriterResources {
     CreateIndex,
