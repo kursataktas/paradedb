@@ -19,14 +19,12 @@ pub struct SegmentReader {
 }
 
 impl SegmentReader {
-    pub unsafe fn new(relation_oid: u32, path: &Path) -> Result<Self> {
-        let handle = SegmentHandle::open(relation_oid, path)?
-            .unwrap_or_else(|| panic!("SegmentHandle should exist for {:?}", path));
-        Ok(Self {
+    pub fn new(relation_oid: u32, path: &Path, handle: SegmentHandle) -> Self {
+        Self {
             path: path.to_path_buf(),
             handle,
             relation_oid,
-        })
+        }
     }
 }
 

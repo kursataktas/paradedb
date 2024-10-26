@@ -10,6 +10,7 @@ use super::reader::ChannelReader;
 use super::writer::ChannelWriter;
 use crate::postgres::storage::segment_handle::SegmentHandle;
 
+#[derive(Debug)]
 pub enum ChannelRequest {
     AtomicRead(PathBuf),
     AtomicWrite(PathBuf, Vec<u8>),
