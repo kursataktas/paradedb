@@ -3,7 +3,6 @@ use std::io::{Cursor, Result, Write};
 use std::path::{Path, PathBuf};
 use tantivy::directory::{AntiCallToken, TerminatingWrite};
 
-
 use super::directory::{ChannelRequest, ChannelResponse};
 
 #[derive(Clone, Debug)]

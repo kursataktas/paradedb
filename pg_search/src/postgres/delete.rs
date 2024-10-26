@@ -15,7 +15,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::channel::directory::{ChannelDirectory, ChannelRequest, ChannelResponse};
+use crate::index::channel::directory::{
+    ChannelDirectory, ChannelRequest, ChannelRequestHandler, ChannelResponse,
+};
 use crate::index::reader::FFType;
 use crate::index::writer::BlockingDirectory;
 use crate::postgres::index::open_search_index;
@@ -80,75 +82,26 @@ pub extern "C" fn ambulkdelete(
             }
         }
         writer.commit().unwrap();
+        writer.wait_merging_threads().unwrap();
         request_sender.send(ChannelRequest::Terminate).unwrap();
     });
 
     let blocking_directory = BlockingDirectory::new(index_oid);
-    for message in request_channel.1.iter() {
-        match message {
-            ChannelRequest::AtomicRead(path) => {
-                let data = blocking_directory.atomic_read(&path).unwrap();
-                response_channel
-                    .0
-                    .send(ChannelResponse::Bytes(data))
-                    .unwrap();
-            }
-            ChannelRequest::AtomicWrite(path, data) => {
-                blocking_directory.atomic_write(&path, &data).unwrap();
-                response_channel
-                    .0
-                    .send(ChannelResponse::AtomicWriteAck)
-                    .unwrap();
-            }
-            ChannelRequest::GetSegmentHandle(path) => {
-                let handle = unsafe { SegmentHandle::open(index_oid, &path).unwrap() };
-                response_channel
-                    .0
-                    .send(ChannelResponse::SegmentHandle(handle))
-                    .unwrap();
-            }
-            ChannelRequest::SegmentRead(path, range, handle) => {
-                let reader = SegmentReader::new(index_oid, &path, handle);
-                let data = reader.read_bytes(range).unwrap();
-                response_channel
-                    .0
-                    .send(ChannelResponse::Bytes(data.as_slice().to_owned()))
-                    .unwrap();
-            }
-            ChannelRequest::SegmentWrite(path, data) => {
-                let mut writer = unsafe { SegmentWriter::new(index_oid, &path) };
-                writer.write_all(data.get_ref()).unwrap();
-                response_channel
-                    .0
-                    .send(ChannelResponse::SegmentWriteAck)
-                    .unwrap();
-            }
-            ChannelRequest::ShouldDeleteCtids(ctids) => {
-                if let Some(actual_callback) = callback {
-                    let should_delete = |ctid_val| unsafe {
-                        let mut ctid = ItemPointerData::default();
-                        crate::postgres::utils::u64_to_item_pointer(ctid_val, &mut ctid);
-                        actual_callback(&mut ctid, callback_state)
-                    };
-                    let filtered_ctids: Vec<u64> = ctids
-                        .into_iter()
-                        .filter(|&ctid_val| should_delete(ctid_val))
-                        .collect();
-                    response_channel
-                        .0
-                        .send(ChannelResponse::ShouldDeleteCtids(filtered_ctids))
-                        .unwrap();
-                } else {
-                    response_channel
-                        .0
-                        .send(ChannelResponse::ShouldDeleteCtids(vec![]))
-                        .unwrap();
-                }
-            }
-            ChannelRequest::Terminate => break,
-            message => panic!("unexpected message in bulkdelete thread: {:?}", message),
+    let handler = ChannelRequestHandler::open(
+        blocking_directory,
+        index_oid,
+        response_channel.0,
+        request_channel.1,
+    );
+    let should_delete = callback.map(|actual_callback| {
+        move |ctid_val: u64| unsafe {
+            let mut ctid = ItemPointerData::default();
+            crate::postgres::utils::u64_to_item_pointer(ctid_val, &mut ctid);
+            actual_callback(&mut ctid, callback_state)
         }
-    }
+    });
+
+    handler.receive_blocking(should_delete).unwrap();
 
     if stats.is_null() {
         stats = unsafe {
