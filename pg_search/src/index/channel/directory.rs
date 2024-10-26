@@ -24,6 +24,7 @@ pub enum ChannelRequest {
     AtomicWrite(PathBuf, Vec<u8>),
     SegmentRead(PathBuf, Range<usize>, SegmentHandle),
     SegmentWrite(PathBuf, Cursor<Vec<u8>>),
+    SegmentDelete(PathBuf),
     GetSegmentHandle(PathBuf),
     ShouldDeleteCtids(Vec<u64>),
     Terminate,
@@ -35,6 +36,7 @@ pub enum ChannelResponse {
     SegmentHandle(Option<SegmentHandle>),
     SegmentWriteAck,
     AtomicWriteAck,
+    SegmentDeleteAck,
     ShouldDeleteCtids(Vec<u64>),
 }
 
@@ -45,20 +47,6 @@ pub struct ChannelDirectory {
     response_sender: Sender<ChannelResponse>,
     response_receiver: Receiver<ChannelResponse>,
     relation_oid: u32,
-}
-
-impl ChannelRequest {
-    pub fn receive_blocking(&self) {
-        match self {
-            ChannelRequest::AtomicRead(_) => {}
-            ChannelRequest::AtomicWrite(_, _) => {}
-            ChannelRequest::SegmentRead(_, _, _) => {}
-            ChannelRequest::SegmentWrite(_, _) => {}
-            ChannelRequest::GetSegmentHandle(_) => {}
-            ChannelRequest::ShouldDeleteCtids(_) => {}
-            ChannelRequest::Terminate => {}
-        }
-    }
 }
 
 // A directory that actually forwards all read/write requests to a channel
@@ -146,8 +134,21 @@ impl Directory for ChannelDirectory {
     }
 
     fn delete(&self, path: &Path) -> result::Result<(), DeleteError> {
-        // TODO: What to do with a deleted segment?
-        Ok(())
+        self.request_sender
+            .send(ChannelRequest::SegmentDelete(path.to_path_buf()))
+            .unwrap();
+
+        match self.response_receiver.recv().unwrap() {
+            ChannelResponse::AtomicWriteAck => Ok(()),
+            unexpected => Err(DeleteError::IoError {
+                io_error: io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("delete unexpected response {:?}", unexpected),
+                )
+                .into(),
+                filepath: path.to_path_buf(),
+            }),
+        }
     }
 
     fn exists(&self, path: &Path) -> Result<bool, OpenReadError> {
@@ -164,10 +165,14 @@ impl Directory for ChannelDirectory {
         })))
     }
 
+    // Internally, tantivy only uses this API to detect new commits to implement the
+    // `OnCommitWithDelay` `ReloadPolicy`. Not implementing watch in a `Directory` only prevents
+    // the `OnCommitWithDelay` `ReloadPolicy` to work properly.
     fn watch(&self, watch_callback: WatchCallback) -> tantivy::Result<WatchHandle> {
-        todo!("directory watch");
+        unimplemented!("OnCommitWithDelay ReloadPolicy not supported");
     }
 
+    // Block storage handles disk writes for us, we don't need to fsync
     fn sync_directory(&self) -> io::Result<()> {
         Ok(())
     }
@@ -220,6 +225,9 @@ impl ChannelRequestHandler {
                     let mut writer = unsafe { SegmentWriter::new(self.relation_oid, &path) };
                     writer.write_all(data.get_ref()).unwrap();
                     self.sender.send(ChannelResponse::SegmentWriteAck)?;
+                }
+                ChannelRequest::SegmentDelete(path) => {
+                    self.sender.send(ChannelResponse::SegmentDeleteAck)?;
                 }
                 ChannelRequest::ShouldDeleteCtids(ctids) => {
                     if let Some(ref should_delete) = should_delete {
