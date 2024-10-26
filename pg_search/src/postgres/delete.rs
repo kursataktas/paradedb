@@ -111,8 +111,8 @@ pub extern "C" fn ambulkdelete(
         };
     }
 
-    //             stats.pages_deleted += deleted;
-    //             stats.num_pages += not_deleted;
+    // stats.pages_deleted += deleted;
+    // stats.num_pages += not_deleted;
 
     stats.into_pg()
 }
