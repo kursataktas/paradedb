@@ -519,7 +519,7 @@ impl SearchIndexReader {
 }
 
 /// Helper for working with different "fast field" types as if they're all one type
-enum FFType {
+pub enum FFType {
     Text(StrColumn),
     I64(Arc<dyn ColumnValues<i64>>),
     F64(Arc<dyn ColumnValues<f64>>),
@@ -528,10 +528,23 @@ enum FFType {
     Date(Arc<dyn ColumnValues<tantivy::DateTime>>),
 }
 
+impl Debug for FFType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FFType::Text(_) => write!(f, "FFType::Text"),
+            FFType::I64(_) => write!(f, "FFType::I64"),
+            FFType::F64(_) => write!(f, "FFType::F64"),
+            FFType::U64(_) => write!(f, "FFType::U64"),
+            FFType::Bool(_) => write!(f, "FFType::Bool"),
+            FFType::Date(_) => write!(f, "FFType::Date"),
+        }
+    }
+}
+
 impl FFType {
     /// Construct the proper [`FFType`] for the specified `field_name`, which
     /// should be a known field name in the Tantivy index
-    fn new(ffr: &FastFieldReaders, field_name: &str) -> Self {
+    pub fn new(ffr: &FastFieldReaders, field_name: &str) -> Self {
         if let Ok(Some(ff)) = ffr.str(field_name) {
             Self::Text(ff)
         } else if let Ok(ff) = ffr.u64(field_name) {

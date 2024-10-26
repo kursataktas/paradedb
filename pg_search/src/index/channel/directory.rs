@@ -17,6 +17,8 @@ pub enum ChannelRequest {
     SegmentRead(PathBuf, Range<usize>, SegmentHandle),
     SegmentWrite(PathBuf, Cursor<Vec<u8>>),
     GetSegmentHandle(PathBuf),
+    ShouldDeleteCtids(Vec<u64>),
+    Terminate,
 }
 
 #[derive(Debug)]
@@ -25,6 +27,7 @@ pub enum ChannelResponse {
     SegmentHandle(Option<SegmentHandle>),
     SegmentWriteAck,
     AtomicWriteAck,
+    ShouldDeleteCtids(Vec<u64>),
 }
 
 #[derive(Clone, Debug)]
@@ -121,7 +124,8 @@ impl Directory for ChannelDirectory {
     }
 
     fn delete(&self, path: &Path) -> result::Result<(), DeleteError> {
-        todo!("directory delete");
+        // TODO: What to do with a deleted segment?
+        Ok(())
     }
 
     fn exists(&self, path: &Path) -> Result<bool, OpenReadError> {
