@@ -18,8 +18,6 @@
 use crate::index::channel::directory::{ChannelDirectory, ChannelRequest, ChannelResponse};
 use crate::index::reader::FFType;
 use crate::index::writer::BlockingDirectory;
-use crate::index::SearchIndex;
-use crate::index::WriterResources;
 use crate::postgres::index::open_search_index;
 use crate::postgres::storage::segment_handle::SegmentHandle;
 use crate::postgres::storage::segment_reader::SegmentReader;
@@ -29,7 +27,7 @@ use std::io::Write;
 use tantivy::directory::FileHandle;
 use tantivy::index::Index;
 use tantivy::indexer::IndexWriter;
-use tantivy::{Directory, IndexReader};
+use tantivy::Directory;
 
 #[pg_guard]
 pub extern "C" fn ambulkdelete(

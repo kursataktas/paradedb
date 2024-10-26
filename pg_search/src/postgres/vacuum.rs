@@ -41,7 +41,7 @@ pub extern "C" fn amvacuumcleanup(
 
     let search_index =
         open_search_index(&index_relation).expect("should be able to open search index");
-    let mut writer = search_index
+    let writer = search_index
         .get_writer(WriterResources::Vacuum)
         .unwrap_or_else(|err| panic!("error loading index writer from directory: {err}"));
 
