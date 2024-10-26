@@ -61,8 +61,8 @@ pub extern "C" fn ambulkdelete(
             .try_into()
             .unwrap();
         let mut writer: IndexWriter = channel_index.writer(500_000_000).unwrap();
-        let searcher = reader.searcher();
-        for segment_reader in searcher.segment_readers() {
+
+        for segment_reader in reader.searcher().segment_readers() {
             let fast_fields = segment_reader.fast_fields();
             let ctid_ff = FFType::new(fast_fields, "ctid");
             if let FFType::U64(ff) = ctid_ff {
