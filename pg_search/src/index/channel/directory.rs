@@ -1,7 +1,13 @@
+use anyhow::Result;
 use crossbeam::channel::{Receiver, Sender};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::{io, io::Cursor, ops::Range, result};
+use std::{
+    io,
+    io::{Cursor, Write},
+    ops::Range,
+    result,
+};
 use tantivy::directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError};
 use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr};
 use tantivy::Directory;
@@ -9,6 +15,8 @@ use tantivy::Directory;
 use super::reader::ChannelReader;
 use super::writer::ChannelWriter;
 use crate::postgres::storage::segment_handle::SegmentHandle;
+use crate::postgres::storage::segment_reader::SegmentReader;
+use crate::postgres::storage::segment_writer::SegmentWriter;
 
 #[derive(Debug)]
 pub enum ChannelRequest {
@@ -37,6 +45,20 @@ pub struct ChannelDirectory {
     response_sender: Sender<ChannelResponse>,
     response_receiver: Receiver<ChannelResponse>,
     relation_oid: u32,
+}
+
+impl ChannelRequest {
+    pub fn receive_blocking(&self) {
+        match self {
+            ChannelRequest::AtomicRead(_) => {}
+            ChannelRequest::AtomicWrite(_, _) => {}
+            ChannelRequest::SegmentRead(_, _, _) => {}
+            ChannelRequest::SegmentWrite(_, _) => {}
+            ChannelRequest::GetSegmentHandle(_) => {}
+            ChannelRequest::ShouldDeleteCtids(_) => {}
+            ChannelRequest::Terminate => {}
+        }
+    }
 }
 
 // A directory that actually forwards all read/write requests to a channel
@@ -147,6 +169,76 @@ impl Directory for ChannelDirectory {
     }
 
     fn sync_directory(&self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+pub struct ChannelRequestHandler {
+    directory: Box<dyn Directory>,
+    relation_oid: u32,
+    sender: Sender<ChannelResponse>,
+    receiver: Receiver<ChannelRequest>,
+}
+
+impl ChannelRequestHandler {
+    pub fn open<T: Into<Box<dyn Directory>>>(
+        directory: T,
+        relation_oid: u32,
+        sender: Sender<ChannelResponse>,
+        receiver: Receiver<ChannelRequest>,
+    ) -> Self {
+        Self {
+            directory: directory.into(),
+            relation_oid,
+            receiver,
+            sender,
+        }
+    }
+
+    pub fn receive_blocking(&self, should_delete: Option<impl Fn(u64) -> bool>) -> Result<()> {
+        for message in self.receiver.iter() {
+            match message {
+                ChannelRequest::AtomicRead(path) => {
+                    let data = self.directory.atomic_read(&path).unwrap();
+                    self.sender.send(ChannelResponse::Bytes(data))?
+                }
+                ChannelRequest::AtomicWrite(path, data) => {
+                    self.directory.atomic_write(&path, &data).unwrap();
+                    self.sender.send(ChannelResponse::AtomicWriteAck)?;
+                }
+                ChannelRequest::GetSegmentHandle(path) => {
+                    let handle = unsafe { SegmentHandle::open(self.relation_oid, &path).unwrap() };
+                    self.sender.send(ChannelResponse::SegmentHandle(handle))?;
+                }
+                ChannelRequest::SegmentRead(path, range, handle) => {
+                    let reader = SegmentReader::new(self.relation_oid, &path, handle);
+                    let data = reader.read_bytes(range).unwrap();
+                    self.sender
+                        .send(ChannelResponse::Bytes(data.as_slice().to_owned()))?;
+                }
+                ChannelRequest::SegmentWrite(path, data) => {
+                    let mut writer = unsafe { SegmentWriter::new(self.relation_oid, &path) };
+                    writer.write_all(data.get_ref()).unwrap();
+                    self.sender.send(ChannelResponse::SegmentWriteAck)?;
+                }
+                ChannelRequest::ShouldDeleteCtids(ctids) => {
+                    if let Some(ref should_delete) = should_delete {
+                        let filtered_ctids: Vec<u64> = ctids
+                            .into_iter()
+                            .filter(|&ctid_val| should_delete(ctid_val))
+                            .collect();
+                        self.sender
+                            .send(ChannelResponse::ShouldDeleteCtids(filtered_ctids))?;
+                    } else {
+                        self.sender
+                            .send(ChannelResponse::ShouldDeleteCtids(vec![]))?;
+                    }
+                }
+                ChannelRequest::Terminate => break,
+                message => panic!("unexpected message in bulkdelete thread: {:?}", message),
+            }
+        }
+
         Ok(())
     }
 }
