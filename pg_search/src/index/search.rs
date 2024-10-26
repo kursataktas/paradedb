@@ -40,9 +40,7 @@ use tracing::trace;
 
 /// PostgreSQL operates in a process-per-client model, meaning every client connection
 /// to PostgreSQL results in a new backend process being spawned on the PostgreSQL server.
-pub static mut SEARCH_EXECUTOR: Lazy<Executor> = Lazy::new(|| {
-    Executor::single_thread()
-});
+pub static mut SEARCH_EXECUTOR: Lazy<Executor> = Lazy::new(|| Executor::single_thread());
 
 pub enum WriterResources {
     CreateIndex,
@@ -104,7 +102,8 @@ impl SearchIndex {
     /// be entirely owned by the new process, with no references.
     pub fn get_writer(&self, resources: WriterResources) -> Result<SearchIndexWriter> {
         let (_, memory_budget) = resources.resources();
-        let underlying_writer = SingleSegmentIndexWriter::new(self.underlying_index.clone(), memory_budget)?;
+        let underlying_writer =
+            SingleSegmentIndexWriter::new(self.underlying_index.clone(), memory_budget)?;
         Ok(SearchIndexWriter {
             underlying_writer: Some(underlying_writer),
         })

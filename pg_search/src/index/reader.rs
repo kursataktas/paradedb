@@ -258,30 +258,42 @@ impl SearchIndexReader {
         executor: &'static Executor,
         query: &dyn Query,
     ) -> SearchResults {
-        // match (
-        //     config.limit_rows,
-        //     config.stable_sort.unwrap_or(true),
-        //     config.order_by_field.clone(),
-        // ) {
-        //     // no limit, no stable sorting, and no sort field
-        //     //
-        //     // this we can use a channel to stream the results and also elide doing key lookups.
-        //     // this is our "fast path"
-        //     (None, false, None) => SearchResults::FastPath(
-        //         self.search_via_channel(executor, include_key, config, query)
-        //             .into_iter()
-        //             .flatten(),
-        //     ),
+        let n = self.searcher.num_docs();
+        let collector = TopDocs::with_limit(n as usize);
+        let results = self
+            .searcher
+            .search_with_executor(
+                query,
+                &collector,
+                executor,
+                tantivy::query::EnableScoring::Enabled {
+                    searcher: &self.searcher,
+                    statistics_provider: &self.searcher,
+                },
+            )
+            .expect("failed to search")
+            .into_iter();
 
-        //     // at least one of limit, stable sorting, or a sort field, so we gotta do it all,
-        //     // including retrieving the key field
-        //     _ => {
-        //         let results = self.search_with_top_docs(executor, true, config, query);
-        //         SearchResults::AllFeatures(results.len(), results.into_iter())
-        //     }
-        // }
-        let results = self.search_with_top_docs(executor, true, config, query);
-        SearchResults::AllFeatures(results.len(), results.into_iter())
+        let mut top_docs = Vec::with_capacity(results.len());
+        for (_ff_u64_value, doc_address) in results {
+            let segment_reader = self.searcher.segment_reader(doc_address.segment_ord);
+            let fast_fields = segment_reader.fast_fields();
+            let ctid_ff = FFType::new(fast_fields, "ctid");
+
+            let ctid = ctid_ff
+                .as_u64(doc_address.doc_id)
+                .expect("DocId should have a ctid");
+
+            let scored = SearchIndexScore {
+                bm25: f32::NAN,
+                key: None,
+                ctid,
+            };
+
+            top_docs.push((scored, doc_address));
+        }
+
+        SearchResults::TopN(top_docs.len(), top_docs.into_iter())
     }
 
     /// Search a specific index segment for matching documents.

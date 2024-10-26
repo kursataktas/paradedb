@@ -47,13 +47,15 @@ impl FileHandle for SegmentReader {
                 let item = pg_sys::PageGetItem(page, item_id);
                 let len = (*item_id).lp_len() as usize;
 
-                let slice_start = match i {
-                    start_block => start % MAX_HEAP_TUPLE_SIZE,
-                    _ => 0,
+                let slice_start = if i == start_block {
+                    start % MAX_HEAP_TUPLE_SIZE
+                } else {
+                    0
                 };
-                let slice_end = match i {
-                    end_block => end % MAX_HEAP_TUPLE_SIZE,
-                    _ => MAX_HEAP_TUPLE_SIZE,
+                let slice_end = if i == end_block {
+                    end % MAX_HEAP_TUPLE_SIZE
+                } else {
+                    MAX_HEAP_TUPLE_SIZE
                 };
                 let slice_len = slice_end - slice_start;
                 let vec: Vec<u8> = Vec::with_capacity(slice_len);
