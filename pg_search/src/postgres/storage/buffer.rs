@@ -38,6 +38,10 @@ impl BufferCache {
         pg_sys::LockBuffer(buffer, lock as i32);
         buffer
     }
+
+    pub unsafe fn record_free_index_page(&self, blockno: pg_sys::BlockNumber) {
+        pg_sys::RecordFreeIndexPage(self.relation, blockno);
+    }
 }
 
 impl Drop for BufferCache {

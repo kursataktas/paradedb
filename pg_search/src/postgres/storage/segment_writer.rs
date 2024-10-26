@@ -15,11 +15,6 @@ pub struct SegmentWriter {
     data: Cursor<Vec<u8>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct NextSegmentAddress {
-    pub next_blockno: pg_sys::BlockNumber,
-}
-
 impl SegmentWriter {
     pub unsafe fn new(relation_oid: u32, path: &Path) -> Self {
         assert!(
@@ -66,7 +61,7 @@ impl TerminatingWrite for SegmentWriter {
                     break;
                 }
 
-                let buffer = cache.new_buffer(size_of::<NextSegmentAddress>());
+                let buffer = cache.new_buffer(0);
                 let page = pg_sys::BufferGetPage(buffer);
                 let data_slice = &sink[0..bytes_read];
 
