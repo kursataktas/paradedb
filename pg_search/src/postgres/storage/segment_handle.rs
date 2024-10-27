@@ -65,6 +65,7 @@ impl SegmentHandle {
 
         let mut offsetno = pg_sys::FirstOffsetNumber;
         // TODO: Implement a way to read the next block if the current block is full
+        // TODO: Would a HashMap implementation be more efficient?
         while offsetno <= pg_sys::PageGetMaxOffsetNumber(page) {
             let item_id = pg_sys::PageGetItemId(page, offsetno);
             let item = pg_sys::PageGetItem(page, item_id);

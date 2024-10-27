@@ -15,12 +15,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use anyhow::Result;
 use crate::index::SearchIndexWriter;
 use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::index::open_search_index;
 use crate::postgres::options::SearchIndexCreateOptions;
 use crate::postgres::utils::row_to_search_document;
+use anyhow::Result;
 use pgrx::{pg_guard, pg_sys, pgrx_extern_c_guard, PgMemoryContexts, PgRelation, PgTupleDesc};
 use std::ffi::CStr;
 use std::panic::{catch_unwind, resume_unwind};
@@ -53,7 +53,7 @@ impl InsertState {
             index,
             writer: Some(writer),
             abort_on_drop: false,
-            relation: index_relation
+            relation: index_relation,
         })
     }
 }
