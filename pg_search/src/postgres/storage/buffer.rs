@@ -9,7 +9,6 @@ pub struct BufferCache {
 
 impl BufferCache {
     pub unsafe fn open(relation_oid: u32) -> Self {
-        pgrx::info!("opening cache for relation {}", relation_oid);
         let relation = pg_sys::RelationIdGetRelation(relation_oid.into());
         Self {
             boxed: PgBox::from_pg(relation),

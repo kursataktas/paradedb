@@ -250,21 +250,14 @@ pub extern "C" fn ambuild(
         .expect("error creating new index instance");
 
     let mut state = do_heap_scan(index_info, &heap_relation, &index_relation);
+    unsafe {
+        let insert_state = init_insert_state(indexrel, index_info, WriterResources::CreateIndex);
+        (*insert_state).try_commit().expect("commit should succeed");
+    }
+
     let mut result = unsafe { PgBox::<pg_sys::IndexBuildResult>::alloc0() };
     result.heap_tuples = state.count as f64;
     result.index_tuples = state.count as f64;
-
-    // This forces InsertState to drop, which will commit the index changes
-    // unsafe {
-    //     if !(*index_info).ii_AmCache.is_null() {
-    //         unsafe {
-    //             let am_cache_ptr = (*index_info).ii_AmCache as *mut InsertState;                
-    //             std::mem::drop(Box::from_raw(am_cache_ptr));                
-    //             (*index_info).ii_AmCache = std::ptr::null_mut();
-    //         }
-    //     }
-    // }
-    pgrx::info!("dropped");
     result.into_pg()
 }
 

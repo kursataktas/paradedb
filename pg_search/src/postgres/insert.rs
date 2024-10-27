@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
+use anyhow::Result;
 use crate::index::SearchIndexWriter;
 use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::index::open_search_index;
@@ -28,51 +29,16 @@ pub struct InsertState {
     pub writer: Option<SearchIndexWriter>,
     pub relation: pg_sys::Relation,
     abort_on_drop: bool,
-    dropped: bool
 }
 
-// impl Drop for InsertState {
-//     /// When [`InsertState`] is dropped we'll either commit the underlying tantivy index changes
-//     /// or abort.
-//     fn drop(&mut self) {
-//         if self.dropped {
-//             pgrx::info!("already dropped");
-//             return;
-//         }
-
-//         pgrx::info!("dropping");
-//         self.dropped = true;
-
-//         // unsafe {
-//         //     pgrx_extern_c_guard(|| {
-//         //         if !pg_sys::IsAbortedTransactionBlockState() && !self.abort_on_drop {
-//         //             if let Some(writer) = self.writer.take() {
-//         //                 pgrx::info!("committing changes to index {:?}", (*self.relation).rd_id);
-//         //                 writer
-//         //                     .commit()
-//         //                     .expect("tantivy index commit should succeed");
-//         //             }
-//         //         } else if let Err(e) = self
-//         //             .writer
-//         //             .as_mut()
-//         //             .expect("writer should not be null")
-//         //             .abort()
-//         //         {
-//         //             if pg_sys::IsAbortedTransactionBlockState() {
-//         //                 // we're in an aborted state, so the best we can do is warn that our
-//         //                 // attempt to abort the tantivy changes failed
-//         //                 pgrx::warning!("failed to abort tantivy index changes: {}", e);
-//         //             } else {
-//         //                 // haven't aborted yet so we can raise the error we got during abort
-//         //                 panic!("{e}")
-//         //             }
-//         //         }
-//         //     });
-//         //     pgrx::info!("committed");
-//         //     self.dropped = true;
-//         // }
-//     }
-// }
+impl InsertState {
+    pub fn try_commit(&mut self) -> Result<()> {
+        if let Some(writer) = self.writer.take() {
+            writer.commit()?;
+        }
+        Ok(())
+    }
+}
 
 impl InsertState {
     fn new(
@@ -85,8 +51,7 @@ impl InsertState {
             index,
             writer: Some(writer),
             abort_on_drop: false,
-            relation: index_relation,
-            dropped: false
+            relation: index_relation
         })
     }
 }
@@ -155,7 +120,6 @@ unsafe fn aminsert_internal(
     ctid: pg_sys::ItemPointer,
     index_info: *mut pg_sys::IndexInfo,
 ) -> bool {
-    pgrx::info!("aminsert");
     let result = catch_unwind(|| {
         let state = &mut *init_insert_state(index_relation, index_info, WriterResources::Statement);
         let tupdesc = PgTupleDesc::from_pg_unchecked((*index_relation).rd_att);
@@ -173,21 +137,13 @@ unsafe fn aminsert_internal(
         search_index
             .insert(writer, search_document)
             .expect("insertion into index should succeed");
+        state.try_commit().expect("commit should succeed");
         true
     });
 
     match result {
         Ok(result) => result,
         Err(e) => {
-            unsafe {
-                // SAFETY:  it's possible the `ii_AmCache` field didn't get initialized, and if
-                // that's the case there's no need (or way!) to indicate we need to do a tantivy abort
-                let state = (*index_info).ii_AmCache.cast::<InsertState>();
-                if !state.is_null() {
-                    (*state).abort_on_drop = true;
-                }
-            }
-
             // bubble up the panic that we caught during `catch_unwind()`
             resume_unwind(e)
         }
