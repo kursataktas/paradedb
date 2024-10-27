@@ -114,10 +114,14 @@ impl Directory for BlockingDirectory {
                     let buffer = cache.get_buffer(blockno, pg_sys::BUFFER_LOCK_EXCLUSIVE);
                     let page = pg_sys::BufferGetPage(buffer);
 
-                    assert!(!pg_sys::PageIsNew(page));
-                    assert!(pg_sys::PageGetMaxOffsetNumber(page) == pg_sys::FirstOffsetNumber);
+                    let max_offset = pg_sys::PageGetMaxOffsetNumber(page);
+                    if max_offset > pg_sys::InvalidOffsetNumber {
+                        for offsetno in pg_sys::FirstOffsetNumber..=max_offset {
+                            pg_sys::PageIndexTupleDelete(page, pg_sys::FirstOffsetNumber);
 
-                    pg_sys::PageIndexTupleDelete(page, pg_sys::FirstOffsetNumber);
+                        }
+                    }
+
                     cache.record_free_index_page(blockno);
                     pg_sys::MarkBufferDirty(buffer);
                     pg_sys::UnlockReleaseBuffer(buffer);

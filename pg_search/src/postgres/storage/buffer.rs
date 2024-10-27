@@ -17,6 +17,9 @@ impl BufferCache {
 
     pub unsafe fn new_buffer(&self, special_size: usize) -> pg_sys::Buffer {
         // Providing an InvalidBlockNumber creates a new page
+        let blockno = pg_sys::GetFreeIndexPage(self.boxed.as_ptr());
+        pgrx::info!("free buffer blockno: {}", blockno);
+
         let buffer = self.get_buffer(pg_sys::InvalidBlockNumber, pg_sys::BUFFER_LOCK_EXCLUSIVE);
         pg_sys::PageInit(
             pg_sys::BufferGetPage(buffer),
@@ -41,6 +44,7 @@ impl BufferCache {
     }
 
     pub unsafe fn record_free_index_page(&self, blockno: pg_sys::BlockNumber) {
+        pgrx::info!("recording free buffer: {}", blockno);
         pg_sys::RecordFreeIndexPage(self.boxed.as_ptr(), blockno);
     }
 }

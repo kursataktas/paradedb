@@ -115,6 +115,8 @@ pub extern "C" fn ambulkdelete(
         };
     }
 
+    unsafe { pg_sys::IndexFreeSpaceMapVacuum(info.index) };
+
     // TODO: Populate stats
     stats.into_pg()
 }
