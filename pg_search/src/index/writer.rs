@@ -57,6 +57,38 @@ impl BlockingDirectory {
     pub fn new(relation_oid: u32) -> Self {
         Self { relation_oid }
     }
+
+    /// ambulkdelete wants to know how many pages were deleted, but the Directory trait doesn't let delete
+    /// return a value, so we provide our own
+    pub fn delete_with_stats(&self, path: &Path) -> result::Result<u32, DeleteError> {
+        unsafe {
+            let mut pages_deleted = 0;
+            let segment_handle = SegmentHandle::open(self.relation_oid, &path).unwrap();
+            if let Some(segment_handle) = segment_handle {
+                let cache = BufferCache::open(self.relation_oid);
+                let blocknos = segment_handle.internal().blocks();
+                for blockno in blocknos {
+                    let buffer = cache.get_buffer(blockno, pg_sys::BUFFER_LOCK_EXCLUSIVE);
+                    let page = pg_sys::BufferGetPage(buffer);
+
+                    let max_offset = pg_sys::PageGetMaxOffsetNumber(page);
+                    if max_offset > pg_sys::InvalidOffsetNumber {
+                        for offsetno in pg_sys::FirstOffsetNumber..=max_offset {
+                            pg_sys::PageIndexTupleDelete(page, pg_sys::FirstOffsetNumber);
+                        }
+                    }
+
+                    cache.record_free_index_page(blockno);
+                    pg_sys::MarkBufferDirty(buffer);
+                    pg_sys::UnlockReleaseBuffer(buffer);
+
+                    pages_deleted += 1;
+                }
+            }
+
+            Ok(pages_deleted)
+        }
+    }
 }
 
 impl Directory for BlockingDirectory {
@@ -105,29 +137,7 @@ impl Directory for BlockingDirectory {
     }
 
     fn delete(&self, path: &Path) -> result::Result<(), DeleteError> {
-        unsafe {
-            let segment_handle = SegmentHandle::open(self.relation_oid, &path).unwrap();
-            if let Some(segment_handle) = segment_handle {
-                let cache = BufferCache::open(self.relation_oid);
-                let blocknos = segment_handle.internal().blocks();
-                for blockno in blocknos {
-                    let buffer = cache.get_buffer(blockno, pg_sys::BUFFER_LOCK_EXCLUSIVE);
-                    let page = pg_sys::BufferGetPage(buffer);
-
-                    let max_offset = pg_sys::PageGetMaxOffsetNumber(page);
-                    if max_offset > pg_sys::InvalidOffsetNumber {
-                        for offsetno in pg_sys::FirstOffsetNumber..=max_offset {
-                            pg_sys::PageIndexTupleDelete(page, pg_sys::FirstOffsetNumber);
-
-                        }
-                    }
-
-                    cache.record_free_index_page(blockno);
-                    pg_sys::MarkBufferDirty(buffer);
-                    pg_sys::UnlockReleaseBuffer(buffer);
-                }
-            }
-        }
+        let _ = self.delete_with_stats(path)?;
         Ok(())
     }
 
