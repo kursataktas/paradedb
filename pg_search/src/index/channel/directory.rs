@@ -14,6 +14,7 @@ use tantivy::Directory;
 
 use super::reader::ChannelReader;
 use super::writer::ChannelWriter;
+use crate::index::writer::BlockingDirectory;
 use crate::postgres::storage::segment_handle::SegmentHandle;
 use crate::postgres::storage::segment_reader::SegmentReader;
 use crate::postgres::storage::segment_writer::SegmentWriter;
@@ -139,7 +140,7 @@ impl Directory for ChannelDirectory {
             .unwrap();
 
         match self.response_receiver.recv().unwrap() {
-            ChannelResponse::AtomicWriteAck => Ok(()),
+            ChannelResponse::SegmentDeleteAck => Ok(()),
             unexpected => Err(DeleteError::IoError {
                 io_error: io::Error::new(
                     io::ErrorKind::Other,
@@ -179,15 +180,19 @@ impl Directory for ChannelDirectory {
 }
 
 pub struct ChannelRequestHandler {
-    directory: Box<dyn Directory>,
+    directory: BlockingDirectory,
     relation_oid: u32,
     sender: Sender<ChannelResponse>,
     receiver: Receiver<ChannelRequest>,
 }
 
+pub struct ChannelRequestStats {
+    pub pages_deleted: u32,
+}
+
 impl ChannelRequestHandler {
-    pub fn open<T: Into<Box<dyn Directory>>>(
-        directory: T,
+    pub fn open(
+        directory: BlockingDirectory,
         relation_oid: u32,
         sender: Sender<ChannelResponse>,
         receiver: Receiver<ChannelRequest>,
@@ -200,7 +205,12 @@ impl ChannelRequestHandler {
         }
     }
 
-    pub fn receive_blocking(&self, should_delete: Option<impl Fn(u64) -> bool>) -> Result<()> {
+    pub fn receive_blocking(
+        &self,
+        should_delete: Option<impl Fn(u64) -> bool>,
+    ) -> Result<ChannelRequestStats> {
+        let mut pages_deleted = 0;
+
         for message in self.receiver.iter() {
             match message {
                 ChannelRequest::AtomicRead(path) => {
@@ -227,7 +237,7 @@ impl ChannelRequestHandler {
                     self.sender.send(ChannelResponse::SegmentWriteAck)?;
                 }
                 ChannelRequest::SegmentDelete(path) => {
-                    self.directory.delete(&path)?;
+                    pages_deleted += self.directory.delete_with_stats(&path)?;
                     self.sender.send(ChannelResponse::SegmentDeleteAck)?;
                 }
                 ChannelRequest::ShouldDeleteCtids(ctids) => {
@@ -248,6 +258,6 @@ impl ChannelRequestHandler {
             }
         }
 
-        Ok(())
+        Ok(ChannelRequestStats { pages_deleted })
     }
 }

@@ -105,7 +105,10 @@ pub extern "C" fn ambulkdelete(
         }
     });
 
-    handler.receive_blocking(should_delete).unwrap();
+    let blocking_stats = handler.receive_blocking(should_delete).unwrap();
+    if blocking_stats.pages_deleted > 0 {
+        unsafe { pg_sys::IndexFreeSpaceMapVacuum(info.index) };
+    }
 
     if stats.is_null() {
         stats = unsafe {
@@ -113,10 +116,9 @@ pub extern "C" fn ambulkdelete(
                 pg_sys::palloc0(std::mem::size_of::<pg_sys::IndexBulkDeleteResult>()).cast(),
             )
         };
+        stats.pages_deleted = 0;
     }
 
-    unsafe { pg_sys::IndexFreeSpaceMapVacuum(info.index) };
-
-    // TODO: Populate stats
+    stats.pages_deleted += blocking_stats.pages_deleted;
     stats.into_pg()
 }
