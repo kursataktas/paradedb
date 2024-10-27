@@ -380,6 +380,7 @@ unsafe fn create_metadata(relation_oid: u32) {
 
     let meta_buffer = cache.new_buffer(std::mem::size_of::<AtomicSpecialData>());
     let managed_buffer = cache.new_buffer(std::mem::size_of::<AtomicSpecialData>());
+
     (*special).meta_blockno = pg_sys::BufferGetBlockNumber(meta_buffer);
     (*special).managed_blockno = pg_sys::BufferGetBlockNumber(managed_buffer);
     (*special).next_blockno = pg_sys::InvalidBlockNumber;
