@@ -25,6 +25,7 @@ pub extern "C" fn amvacuumcleanup(
     info: *mut pg_sys::IndexVacuumInfo,
     stats: *mut pg_sys::IndexBulkDeleteResult,
 ) -> *mut pg_sys::IndexBulkDeleteResult {
+    pgrx::info!("amvacuumcleanup");
     let info = unsafe { PgBox::from_pg(info) };
     let mut stats = stats;
 

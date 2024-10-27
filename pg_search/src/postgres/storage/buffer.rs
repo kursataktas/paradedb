@@ -4,13 +4,15 @@ use std::ptr::null_mut;
 // Reads and writes buffers from the buffer cache for a pg_sys::Relation
 #[derive(Clone, Debug)]
 pub struct BufferCache {
-    relation: pg_sys::Relation,
+    boxed: PgBox<pg_sys::RelationData>,
 }
 
 impl BufferCache {
     pub unsafe fn open(relation_oid: u32) -> Self {
+        pgrx::info!("opening cache for relation {}", relation_oid);
+        let relation = pg_sys::RelationIdGetRelation(relation_oid.into());
         Self {
-            relation: pg_sys::relation_open(relation_oid.into(), pg_sys::AccessShareLock as i32),
+            boxed: PgBox::from_pg(relation),
         }
     }
 
@@ -29,7 +31,7 @@ impl BufferCache {
 
     pub unsafe fn get_buffer(&self, blockno: pg_sys::BlockNumber, lock: u32) -> pg_sys::Buffer {
         let buffer = pg_sys::ReadBufferExtended(
-            self.relation,
+            self.boxed.as_ptr(),
             pg_sys::ForkNumber::MAIN_FORKNUM,
             blockno,
             pg_sys::ReadBufferMode::RBM_NORMAL,
@@ -40,14 +42,14 @@ impl BufferCache {
     }
 
     pub unsafe fn record_free_index_page(&self, blockno: pg_sys::BlockNumber) {
-        pg_sys::RecordFreeIndexPage(self.relation, blockno);
+        pg_sys::RecordFreeIndexPage(self.boxed.as_ptr(), blockno);
     }
 }
 
 impl Drop for BufferCache {
     fn drop(&mut self) {
         unsafe {
-            pg_sys::RelationClose(self.relation);
+            pg_sys::RelationClose(self.boxed.as_ptr());
         }
     }
 }
