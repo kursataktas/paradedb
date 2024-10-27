@@ -31,6 +31,7 @@ pub unsafe extern "C" fn amcostestimate(
     index_correlation: *mut f64,
     index_pages: *mut f64,
 ) {
+    pgrx::info!("amcostestimate");
     assert!(!path.is_null());
     assert!(!(*path).indexinfo.is_null());
 

@@ -18,7 +18,7 @@
 use crate::index::WriterDirectory;
 use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::index::relfilenode_from_pg_relation;
-use crate::postgres::insert::init_insert_state;
+use crate::postgres::insert::{InsertState, init_insert_state};
 use crate::postgres::options::SearchIndexCreateOptions;
 use crate::postgres::storage::atomic_directory::AtomicSpecialData;
 use crate::postgres::storage::buffer::BufferCache;
@@ -245,14 +245,26 @@ pub extern "C" fn ambuild(
     let directory =
         WriterDirectory::from_oids(database_oid, index_oid.as_u32(), relfilenode.as_u32());
 
+    pgrx::info!("new oid for index: {}", index_oid.as_u32());
     SearchIndex::create_index(directory, fields, key_field_index)
         .expect("error creating new index instance");
 
-    let state = do_heap_scan(index_info, &heap_relation, &index_relation);
+    let mut state = do_heap_scan(index_info, &heap_relation, &index_relation);
     let mut result = unsafe { PgBox::<pg_sys::IndexBuildResult>::alloc0() };
     result.heap_tuples = state.count as f64;
     result.index_tuples = state.count as f64;
 
+    // This forces InsertState to drop, which will commit the index changes
+    // unsafe {
+    //     if !(*index_info).ii_AmCache.is_null() {
+    //         unsafe {
+    //             let am_cache_ptr = (*index_info).ii_AmCache as *mut InsertState;                
+    //             std::mem::drop(Box::from_raw(am_cache_ptr));                
+    //             (*index_info).ii_AmCache = std::ptr::null_mut();
+    //         }
+    //     }
+    // }
+    pgrx::info!("dropped");
     result.into_pg()
 }
 
@@ -314,7 +326,6 @@ unsafe fn build_callback_internal(
         .as_mut()
         .expect("writer should not be null");
     let schema = &(*insert_state).index.schema;
-
     // In the block below, we switch to the memory context we've defined on our build
     // state, resetting it before and after. We do this because we're looking up a
     // PgTupleDesc... which is supposed to free the corresponding Postgres memory when it
@@ -334,7 +345,6 @@ unsafe fn build_callback_internal(
                             .to_string_lossy()
                     );
                 });
-
             search_index
                 .insert(writer, search_document)
                 .unwrap_or_else(|err| {
