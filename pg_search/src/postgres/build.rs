@@ -18,7 +18,7 @@
 use crate::index::WriterDirectory;
 use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::index::relfilenode_from_pg_relation;
-use crate::postgres::insert::{InsertState, init_insert_state};
+use crate::postgres::insert::{init_insert_state, InsertState};
 use crate::postgres::options::SearchIndexCreateOptions;
 use crate::postgres::storage::atomic_directory::AtomicSpecialData;
 use crate::postgres::storage::buffer::BufferCache;
@@ -245,7 +245,6 @@ pub extern "C" fn ambuild(
     let directory =
         WriterDirectory::from_oids(database_oid, index_oid.as_u32(), relfilenode.as_u32());
 
-    pgrx::info!("new oid for index: {}", index_oid.as_u32());
     SearchIndex::create_index(directory, fields, key_field_index)
         .expect("error creating new index instance");
 

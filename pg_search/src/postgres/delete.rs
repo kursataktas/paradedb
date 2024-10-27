@@ -39,7 +39,6 @@ pub extern "C" fn ambulkdelete(
     callback: pg_sys::IndexBulkDeleteCallback,
     callback_state: *mut ::std::os::raw::c_void,
 ) -> *mut pg_sys::IndexBulkDeleteResult {
-    pgrx::info!("ambulkdelete");
     let info = unsafe { PgBox::from_pg(info) };
     let mut stats = unsafe { PgBox::from_pg(stats) };
     let index_relation = unsafe { PgRelation::from_pg(info.index) };
