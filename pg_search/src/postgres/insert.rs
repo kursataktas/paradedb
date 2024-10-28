@@ -30,14 +30,58 @@ pub struct InsertState {
     pub writer: Option<SearchIndexWriter>,
     pub relation: pg_sys::Relation,
     abort_on_drop: bool,
+    committed: bool,
 }
 
 impl InsertState {
     pub fn try_commit(&mut self) -> Result<()> {
+        pgrx::info!("try commit");
         if let Some(writer) = self.writer.take() {
+            pgrx::info!("committing");
             writer.commit()?;
+            self.committed = true;
         }
         Ok(())
+    }
+}
+
+impl Drop for InsertState {
+    /// When [`InsertState`] is dropped we'll either commit the underlying tantivy index changes
+    /// or abort.
+    fn drop(&mut self) {
+        unsafe {
+            pgrx_extern_c_guard(|| {
+                if !pg_sys::IsAbortedTransactionBlockState()
+                    && !self.abort_on_drop
+                    && !self.committed
+                {
+                    self.writer
+                        .take()
+                        .expect("writer should not be null")
+                        .commit()
+                        .expect("tantivy index commit should succeed");
+                    self.committed = true;
+                }
+
+                if pg_sys::IsAbortedTransactionBlockState() || self.abort_on_drop {
+                    if let Err(e) = self
+                        .writer
+                        .take()
+                        .expect("writer should not be null")
+                        .abort()
+                    {
+                        if pg_sys::IsAbortedTransactionBlockState() {
+                            // we're in an aborted state, so the best we can do is warn that our
+                            // attempt to abort the tantivy changes failed
+                            pgrx::warning!("failed to abort tantivy index changes: {}", e);
+                        } else {
+                            // haven't aborted yet so we can raise the error we got during abort
+                            panic!("{e}")
+                        }
+                    }
+                }
+            });
+        }
     }
 }
 
@@ -53,6 +97,7 @@ impl InsertState {
             index,
             writer: Some(writer),
             abort_on_drop: false,
+            committed: false,
             relation: index_relation,
         })
     }
@@ -140,13 +185,21 @@ unsafe fn aminsert_internal(
         search_index
             .insert(writer, search_document)
             .expect("insertion into index should succeed");
-        state.try_commit().expect("commit should succeed");
         true
     });
 
     match result {
         Ok(result) => result,
         Err(e) => {
+            unsafe {
+                // SAFETY:  it's possible the `ii_AmCache` field didn't get initialized, and if
+                // that's the case there's no need (or way!) to indicate we need to do a tantivy abort
+                let state = (*index_info).ii_AmCache.cast::<InsertState>();
+                if !state.is_null() {
+                    (*state).abort_on_drop = true;
+                }
+            }
+
             // bubble up the panic that we caught during `catch_unwind()`
             resume_unwind(e)
         }
