@@ -117,6 +117,5 @@ pub extern "C" fn ambulkdelete(
     }
 
     stats.pages_deleted += blocking_stats.pages_deleted;
-    pgrx::info!("bulkdel pages deleted: {}", stats.pages_deleted);
     stats.into_pg()
 }

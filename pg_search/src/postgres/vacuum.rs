@@ -27,7 +27,6 @@ pub extern "C" fn amvacuumcleanup(
 ) -> *mut pg_sys::IndexBulkDeleteResult {
     let info = unsafe { PgBox::from_pg(info) };
     if stats.is_null() || info.analyze_only {
-        pgrx::info!("no stats");
         return stats;
     }
 

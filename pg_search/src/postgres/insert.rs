@@ -35,9 +35,7 @@ pub struct InsertState {
 
 impl InsertState {
     pub fn try_commit(&mut self) -> Result<()> {
-        pgrx::info!("try commit");
         if let Some(writer) = self.writer.take() {
-            pgrx::info!("committing");
             writer.commit()?;
             self.committed = true;
         }
@@ -167,7 +165,6 @@ unsafe fn aminsert_internal(
     ctid: pg_sys::ItemPointer,
     index_info: *mut pg_sys::IndexInfo,
 ) -> bool {
-    pgrx::info!("insert");
     let result = catch_unwind(|| {
         let state = &mut *init_insert_state(index_relation, index_info, WriterResources::Statement);
         let tupdesc = PgTupleDesc::from_pg_unchecked((*index_relation).rd_att);
