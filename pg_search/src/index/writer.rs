@@ -61,36 +61,21 @@ pub struct BlockingDirectory {
 }
 
 pub struct BlockingLock {
-    blockno: Option<u32>,
-    relation_oid: u32,
+    buffer: pg_sys::Buffer,
 }
 
 impl BlockingLock {
-    pub fn new(relation_oid: u32, blockno: Option<u32>) -> Self {
-        if let Some(blockno) = blockno {
-            unsafe {
-                let cache = BufferCache::open(relation_oid);
-                let buffer = cache.get_buffer(blockno, Some(pg_sys::BUFFER_LOCK_EXCLUSIVE));
-                pg_sys::ReleaseBuffer(buffer);
-            }
-        }
+    pub unsafe fn new(relation_oid: u32, blockno: pg_sys::BlockNumber) -> Self {
+        let cache = BufferCache::open(relation_oid);
+        let buffer = cache.get_buffer(blockno, Some(pg_sys::BUFFER_LOCK_EXCLUSIVE));
 
-        Self {
-            blockno,
-            relation_oid,
-        }
+        Self { buffer }
     }
 }
 
 impl Drop for BlockingLock {
     fn drop(&mut self) {
-        if let Some(blockno) = self.blockno {
-            unsafe {
-                let cache = BufferCache::open(self.relation_oid);
-                let buffer = cache.get_buffer(blockno, None);
-                pg_sys::UnlockReleaseBuffer(buffer);
-            }
-        }
+        unsafe { pg_sys::UnlockReleaseBuffer(self.buffer) };
     }
 }
 
@@ -110,7 +95,7 @@ impl BlockingDirectory {
                 let cache = BufferCache::open(self.relation_oid);
                 let blocknos = segment_handle.internal().blocks();
                 for blockno in blocknos {
-                    let buffer = cache.get_buffer(blockno, None);
+                    let buffer = cache.get_buffer(blockno, Some(pg_sys::BUFFER_LOCK_EXCLUSIVE));
                     let page = pg_sys::BufferGetPage(buffer);
 
                     let max_offset = pg_sys::PageGetMaxOffsetNumber(page);
@@ -122,7 +107,7 @@ impl BlockingDirectory {
 
                     cache.record_free_index_page(blockno);
                     pg_sys::MarkBufferDirty(buffer);
-                    pg_sys::ReleaseBuffer(buffer);
+                    pg_sys::UnlockReleaseBuffer(buffer);
 
                     pages_deleted += 1;
                 }
@@ -208,10 +193,17 @@ impl Directory for BlockingDirectory {
                 blockno = Some(directory.managed_blockno);
             }
 
-            Ok(DirectoryLock::from(Box::new(BlockingLock::new(
-                self.relation_oid,
-                blockno,
-            ))))
+            if let Some(blockno) = blockno {
+                return Ok(DirectoryLock::from(Box::new(BlockingLock::new(
+                    self.relation_oid,
+                    blockno,
+                ))));
+            } else {
+                return Err(LockError::wrap_io_error(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("acquire_lock unexpected lock {:?}", lock),
+                )));
+            }
         }
     }
 
