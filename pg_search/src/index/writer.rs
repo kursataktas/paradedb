@@ -45,6 +45,9 @@ use crate::postgres::storage::segment_handle::SegmentHandle;
 use crate::postgres::storage::segment_reader::SegmentReader;
 use crate::postgres::storage::segment_writer::SegmentWriter;
 
+pub static META_FILEPATH: Lazy<&'static Path> = Lazy::new(|| Path::new("meta.json"));
+pub static MANAGED_FILEPATH: Lazy<&'static Path> = Lazy::new(|| Path::new(".managed.json"));
+
 /// We maintain our own tantivy::directory::Directory implementation for finer-grained
 /// control over the locking behavior, which enables us to manage Writer instances
 /// across multiple connections.
@@ -114,9 +117,15 @@ impl Directory for BlockingDirectory {
 
     fn atomic_write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
         let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
-        match path.to_str().unwrap().ends_with("meta.json") {
-            true => unsafe { directory.write_meta(data) },
-            false => unsafe { directory.write_managed(data) },
+        if path.to_path_buf() == *META_FILEPATH {
+            unsafe { directory.write_meta(data) };
+        } else if path.to_path_buf() == *MANAGED_FILEPATH {
+            unsafe { directory.write_managed(data) };
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("atomic_write unexpected path: {:?}", path),
+            ));
         };
 
         Ok(())
@@ -124,9 +133,12 @@ impl Directory for BlockingDirectory {
 
     fn atomic_read(&self, path: &Path) -> result::Result<Vec<u8>, OpenReadError> {
         let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
-        let data = match path.to_str().unwrap().ends_with("meta.json") {
-            true => unsafe { directory.read_meta() },
-            false => unsafe { directory.read_managed() },
+        let data = if path.to_path_buf() == *META_FILEPATH {
+            unsafe { directory.read_meta() }
+        } else if path.to_path_buf() == *MANAGED_FILEPATH {
+            unsafe { directory.read_managed() }
+        } else {
+            return Err(OpenReadError::FileDoesNotExist(PathBuf::from(path)));
         };
 
         if data.is_empty() {

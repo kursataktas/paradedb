@@ -106,9 +106,6 @@ pub extern "C" fn ambulkdelete(
     });
 
     let blocking_stats = handler.receive_blocking(should_delete).unwrap();
-    if blocking_stats.pages_deleted > 0 {
-        unsafe { pg_sys::IndexFreeSpaceMapVacuum(info.index) };
-    }
 
     if stats.is_null() {
         stats = unsafe {
@@ -120,5 +117,6 @@ pub extern "C" fn ambulkdelete(
     }
 
     stats.pages_deleted += blocking_stats.pages_deleted;
+    pgrx::info!("bulkdel pages deleted: {}", stats.pages_deleted);
     stats.into_pg()
 }
