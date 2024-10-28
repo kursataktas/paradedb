@@ -17,7 +17,7 @@ use crate::index::reader::channel::ChannelReader;
 use crate::index::reader::file_handle::FileHandleReader;
 use crate::index::writer::channel::ChannelWriter;
 use crate::index::writer::io::IoWriter;
-use crate::postgres::storage::segment_handle::SegmentHandle;
+use crate::index::segment_handle::SegmentHandle;
 
 #[derive(Debug)]
 pub enum ChannelRequest {
@@ -196,7 +196,7 @@ impl ChannelRequestHandler {
         receiver: Receiver<ChannelRequest>,
     ) -> Self {
         Self {
-            directory: directory.into(),
+            directory: directory,
             relation_oid,
             receiver,
             sender,

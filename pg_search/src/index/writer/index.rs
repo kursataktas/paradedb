@@ -22,30 +22,20 @@ use crate::{
         SearchDocument, SearchFieldConfig, SearchFieldName, SearchFieldType, SearchIndexSchema,
     },
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use once_cell::sync::Lazy;
-use pgrx::pg_sys;
 use std::io::Write;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::{collections::HashSet, path::Path};
-use std::{io, result};
-use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr};
+use std::collections::HashSet;
 use tantivy::{
-    directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError},
-    directory::{MANAGED_LOCK, META_LOCK},
     indexer::{AddOperation, SegmentWriter},
     IndexSettings,
 };
-use tantivy::{schema::Field, Directory, Index};
+use tantivy::{Directory, Index};
 use thiserror::Error;
 
-use crate::index::atomic::AtomicDirectory;
 use crate::index::directory::blocking::{BlockingDirectory, META_FILEPATH};
 use crate::index::directory::writer::{SearchDirectoryError, SearchFs, WriterDirectory};
 use crate::index::WriterResources;
-use crate::postgres::storage::buffer::BufferCache;
-use crate::postgres::storage::segment_handle;
 
 /// A global store of which indexes have been created during a transaction,
 /// so that they can be committed or rolled back in case of an abort.

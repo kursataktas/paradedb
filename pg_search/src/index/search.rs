@@ -32,7 +32,6 @@ use anyhow::Result;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::num::NonZeroUsize;
-use tantivy::indexer::SegmentWriter;
 use tantivy::query::Query;
 use tantivy::{query::QueryParser, Executor, Index};
 use thiserror::Error;
@@ -102,10 +101,10 @@ impl SearchIndex {
     /// can get an exclusive lock on the Tantivy writer. The return type needs to
     /// be entirely owned by the new process, with no references.
     pub fn get_writer(&self, resources: WriterResources) -> Result<SearchIndexWriter> {
-        Ok(SearchIndexWriter::new(
+        SearchIndexWriter::new(
             self.underlying_index.clone(),
             resources,
-        )?)
+        )
     }
 
     #[allow(static_mut_refs)]

@@ -18,8 +18,8 @@
 pub mod directory;
 pub mod reader;
 pub mod search;
+pub mod segment_handle;
 pub mod writer;
 
 pub use directory::*;
 pub use search::*;
-pub use writer::*;

@@ -18,7 +18,7 @@
 mod directory;
 mod index;
 
-pub use crate::index::SearchFs;
+pub use crate::index::directory::writer::SearchFs;
 use crate::schema::{
     SearchDocument, SearchFieldConfig, SearchFieldName, SearchFieldType, SearchIndexSchema,
 };

@@ -27,11 +27,11 @@ mod scan;
 mod vacuum;
 mod validate;
 
+pub mod buffer;
 pub mod customscan;
 pub mod datetime;
 pub mod index;
 mod parallel;
-pub mod storage;
 pub mod transaction;
 pub mod types;
 pub mod utils;

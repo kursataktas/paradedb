@@ -1,11 +1,10 @@
 use pgrx::*;
-use serde::{Deserialize, Serialize};
 use std::io::{Cursor, Read, Result, Seek, Write};
 use std::path::{Path, PathBuf};
 use tantivy::directory::{AntiCallToken, TerminatingWrite};
 
-use crate::postgres::storage::buffer::BufferCache;
-use crate::postgres::storage::segment_handle::{SegmentHandle, SegmentHandleInternal};
+use crate::index::segment_handle::{SegmentHandle, SegmentHandleInternal};
+use crate::postgres::buffer::BufferCache;
 use crate::postgres::utils::max_heap_tuple_size;
 
 #[derive(Clone, Debug)]
@@ -74,8 +73,8 @@ impl TerminatingWrite for IoWriter {
                 );
 
                 blocks.push(pg_sys::BufferGetBlockNumber(buffer));
-                pg_sys::MarkBufferDirty(buffer as i32);
-                pg_sys::UnlockReleaseBuffer(buffer as i32);
+                pg_sys::MarkBufferDirty(buffer);
+                pg_sys::UnlockReleaseBuffer(buffer);
             }
 
             let internal = SegmentHandleInternal::new(self.path.clone(), blocks, total_bytes);
