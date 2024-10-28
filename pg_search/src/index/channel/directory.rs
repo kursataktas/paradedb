@@ -157,9 +157,7 @@ impl Directory for ChannelDirectory {
     }
 
     fn acquire_lock(&self, lock: &Lock) -> result::Result<DirectoryLock, LockError> {
-        // The lock itself doesn't seem to actually be used anywhere by Tantivy
-        // acquire_lock seems to be a place for us to implement our own locking behavior
-        // which we don't need since pg_sys::ReadBuffer is already handling this
+        /// TODO: Acquire lock
         Ok(DirectoryLock::from(Box::new(Lock {
             filepath: lock.filepath.clone(),
             is_blocking: true,
@@ -210,7 +208,6 @@ impl ChannelRequestHandler {
         should_delete: Option<impl Fn(u64) -> bool>,
     ) -> Result<ChannelRequestStats> {
         let mut pages_deleted = 0;
-
         for message in self.receiver.iter() {
             match message {
                 ChannelRequest::AtomicRead(path) => {

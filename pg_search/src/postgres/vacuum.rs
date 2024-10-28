@@ -26,46 +26,21 @@ pub extern "C" fn amvacuumcleanup(
     stats: *mut pg_sys::IndexBulkDeleteResult,
 ) -> *mut pg_sys::IndexBulkDeleteResult {
     let info = unsafe { PgBox::from_pg(info) };
-    let mut stats = stats;
-
-    if info.analyze_only {
+    if stats.is_null() || info.analyze_only {
+        pgrx::info!("no stats");
         return stats;
     }
 
-    if stats.is_null() {
-        stats =
-            unsafe { pg_sys::palloc0(std::mem::size_of::<pg_sys::IndexBulkDeleteResult>()).cast() };
+    let pages_deleted = unsafe { (*stats).pages_deleted };
+    // If pages were deleted, then ambulkdelete already merged segments, no need to merge again
+    if pages_deleted > 0 {
+        pgrx::info!("pages were deleted, no need to merge segments");
+        unsafe { pg_sys::IndexFreeSpaceMapVacuum(info.index) };
+        return stats;
     }
 
-    let index_relation = unsafe { PgRelation::from_pg(info.index) };
-    let index_name = index_relation.name();
-
-    let search_index =
-        open_search_index(&index_relation).expect("should be able to open search index");
-    let options = index_relation.rd_options as *mut SearchIndexCreateOptions;
-    let mut writer = search_index
-        .get_writer(WriterResources::Vacuum, unsafe {
-            options.as_ref().unwrap()
-        })
-        .unwrap_or_else(|err| panic!("error loading index writer from directory: {err}"));
-
-    // Garbage collect the index and clear the writer cache to free up locks.
-    search_index
-        .vacuum(&writer)
-        .unwrap_or_else(|err| panic!("error during vacuum on index {index_name}: {err:?}"));
-
-    // we also need to make sure segments get merged.
-    //
-    // we can force this by doing a .commit(), even tho we don't have changes
-    // then directly taking control of the underlying_writer and waiting for the merge threads
-    // to complete
-    writer.commit().expect("commit should succeed");
-    // writer
-    //     .underlying_writer
-    //     .take()
-    //     .unwrap()
-    //     .wait_merging_threads()
-    //     .expect("wait_merging_threads() should succeed");
+    // TODO: Implement merging segments
+    // Do we need to garbage collect?
 
     stats
 }
