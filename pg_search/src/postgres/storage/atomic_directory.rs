@@ -67,7 +67,7 @@ impl AtomicDirectory {
     }
 
     unsafe fn write_bytes(&self, data: &[u8], blockno: pg_sys::BlockNumber) {
-        let buffer = self.cache.get_buffer(blockno, None);
+        let buffer = self.cache.get_buffer(blockno, Some(pg_sys::BUFFER_LOCK_EXCLUSIVE));
         let page = pg_sys::BufferGetPage(buffer);
 
         if pg_sys::PageGetMaxOffsetNumber(page) == pg_sys::InvalidOffsetNumber {
@@ -88,6 +88,6 @@ impl AtomicDirectory {
         }
 
         pg_sys::MarkBufferDirty(buffer);
-        pg_sys::ReleaseBuffer(buffer);
+        pg_sys::UnlockReleaseBuffer(buffer);
     }
 }
