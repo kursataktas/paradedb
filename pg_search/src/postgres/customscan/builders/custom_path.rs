@@ -63,8 +63,8 @@ impl From<u32> for SortDirection {
 impl From<SortDirection> for crate::index::reader::SortDirection {
     fn from(value: SortDirection) -> Self {
         match value {
-            SortDirection::Asc => crate::index::reader::SortDirection::Asc,
-            SortDirection::Desc => crate::index::reader::SortDirection::Desc,
+            SortDirection::Asc => crate::index::reader::index::SortDirection::Asc,
+            SortDirection::Desc => crate::index::reader::index::SortDirection::Desc,
         }
     }
 }
