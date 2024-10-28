@@ -42,7 +42,7 @@ use thiserror::Error;
 
 use super::directory::{SearchDirectoryError, SearchFs, WriterDirectory};
 use crate::index::WriterResources;
-use crate::postgres::storage::atomic_directory::AtomicDirectory;
+use crate::index::directory::AtomicDirectory;
 use crate::postgres::storage::buffer::BufferCache;
 use crate::postgres::storage::segment_handle;
 use crate::postgres::storage::segment_reader;
