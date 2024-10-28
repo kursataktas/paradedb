@@ -33,9 +33,10 @@ use std::{io, result};
 use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr};
 use tantivy::{
     directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError},
+    indexer::{self, AddOperation},
     IndexSettings,
 };
-use tantivy::{schema::Field, Directory, Index, SingleSegmentIndexWriter};
+use tantivy::{schema::Field, Directory, Index};
 use thiserror::Error;
 
 use super::directory::{SearchDirectoryError, SearchFs, WriterDirectory};
@@ -45,6 +46,7 @@ use crate::postgres::storage::segment_handle::SegmentHandle;
 use crate::postgres::storage::segment_reader::SegmentReader;
 use crate::postgres::storage::segment_writer::SegmentWriter;
 
+/// Defined by Tantivy in core/mod.rs
 pub static META_FILEPATH: Lazy<&'static Path> = Lazy::new(|| Path::new("meta.json"));
 pub static MANAGED_FILEPATH: Lazy<&'static Path> = Lazy::new(|| Path::new(".managed.json"));
 
@@ -188,51 +190,33 @@ static mut PENDING_INDEX_DROPS: Lazy<HashSet<WriterDirectory>> = Lazy::new(HashS
 pub struct SearchIndexWriter {
     // this is an Option<> because on drop we need to take ownership of the underlying
     // IndexWriter instance so we can, in the background, wait for all merging threads to finish
-    pub underlying_writer: Option<IndexWriter>,
+    pub underlying_writer: Option<indexer::SegmentWriter>,
+    pub current_opstamp: tantivy::Opstamp,
     pub wants_merge: bool,
 }
 
 impl SearchIndexWriter {
     pub fn insert(&mut self, document: SearchDocument) -> Result<(), IndexError> {
         // Add the Tantivy document to the index.
+        let tantivy_document: tantivy::TantivyDocument = document.into();
+        self.current_opstamp += 1;
         self.underlying_writer
             .as_mut()
             .unwrap()
-            .add_document(document.into())?;
+            .add_document(AddOperation {
+                opstamp: self.current_opstamp,
+                document: tantivy_document,
+            })?;
 
         Ok(())
     }
 
-    pub fn delete(&self, ctid_field: &Field, ctid_values: &[u64]) -> Result<(), IndexError> {
-        // for ctid in ctid_values {
-        //     let ctid_term = tantivy::Term::from_field_u64(*ctid_field, *ctid);
-        //     self.underlying_writer
-        //         .as_ref()
-        //         .unwrap()
-        //         .delete_term(ctid_term);
-        // }
-        Ok(())
-    }
-
-    pub fn commit(self) -> Result<()> {
+    pub fn commit(mut self) -> Result<()> {
+        self.current_opstamp += 1;
         self.underlying_writer
             .unwrap()
             .finalize()
             .context("error committing to tantivy index")?;
-        Ok(())
-    }
-
-    pub fn abort(&mut self) -> Result<(), IndexError> {
-        // self.underlying_writer.as_mut().unwrap().rollback()?;
-        Ok(())
-    }
-
-    pub fn vacuum(&self) -> Result<(), IndexError> {
-        // self.underlying_writer
-        //     .as_ref()
-        //     .unwrap()
-        //     .garbage_collect_files()
-        //     .wait()?;
         Ok(())
     }
 
