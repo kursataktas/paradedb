@@ -3,7 +3,7 @@ use std::io::{Cursor, Result, Write};
 use std::path::{Path, PathBuf};
 use tantivy::directory::{AntiCallToken, TerminatingWrite};
 
-use super::directory::{ChannelRequest, ChannelResponse};
+use crate::index::directory::channel::{ChannelRequest, ChannelResponse};
 
 #[derive(Clone, Debug)]
 pub struct ChannelWriter {

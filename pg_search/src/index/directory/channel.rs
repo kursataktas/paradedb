@@ -12,9 +12,9 @@ use tantivy::directory::error::{DeleteError, LockError, OpenReadError, OpenWrite
 use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr};
 use tantivy::Directory;
 
-use super::reader::ChannelReader;
-use super::writer::ChannelWriter;
-use crate::index::writer::BlockingDirectory;
+use crate::index::channel::reader::ChannelReader;
+use crate::index::channel::writer::ChannelWriter;
+use crate::index::directory::blocking::BlockingDirectory;
 use crate::postgres::storage::segment_handle::SegmentHandle;
 use crate::postgres::storage::segment_reader::SegmentReader;
 use crate::postgres::storage::segment_writer::SegmentWriter;

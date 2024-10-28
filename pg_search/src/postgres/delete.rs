@@ -15,11 +15,11 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::channel::directory::{
+use crate::index::directory::blocking::BlockingDirectory;
+use crate::index::directory::channel::{
     ChannelDirectory, ChannelRequest, ChannelRequestHandler, ChannelResponse,
 };
 use crate::index::reader::FFType;
-use crate::index::writer::BlockingDirectory;
 use crate::index::WriterResources;
 use crate::postgres::index::open_search_index;
 use crate::postgres::storage::segment_handle::SegmentHandle;
