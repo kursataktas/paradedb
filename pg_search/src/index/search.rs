@@ -16,7 +16,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use super::reader::index::SearchIndexReader;
-use super::IndexError;
+use super::writer::index::IndexError;
 use crate::gucs;
 use crate::index::merge_policy::NPlusOneMergePolicy;
 use crate::index::SearchIndexWriter;

@@ -16,7 +16,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use crate::index::directory::writer::SearchFs;
-use crate::index::SearchIndexWriter;
+use crate::index::writer::index::SearchIndexWriter;
 use pgrx::{pg_guard, pg_sys};
 use tracing::warn;
 

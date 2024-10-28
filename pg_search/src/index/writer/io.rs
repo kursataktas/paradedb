@@ -9,13 +9,13 @@ use crate::postgres::storage::segment_handle::{SegmentHandle, SegmentHandleInter
 use crate::postgres::utils::max_heap_tuple_size;
 
 #[derive(Clone, Debug)]
-pub struct SegmentWriter {
+pub struct IoWriter {
     relation_oid: u32,
     path: PathBuf,
     data: Cursor<Vec<u8>>,
 }
 
-impl SegmentWriter {
+impl IoWriter {
     pub unsafe fn new(relation_oid: u32, path: &Path) -> Self {
         assert!(
             !path.to_str().unwrap().ends_with(".lock"),
@@ -30,7 +30,7 @@ impl SegmentWriter {
     }
 }
 
-impl Write for SegmentWriter {
+impl Write for IoWriter {
     // This function will attempt to write the entire contents of `buf`, but
     // the entire write might not succeed, or the write may also generate an
     // error. Typically, a call to `write` represents one attempt to write to
@@ -45,10 +45,9 @@ impl Write for SegmentWriter {
     }
 }
 
-impl TerminatingWrite for SegmentWriter {
+impl TerminatingWrite for IoWriter {
     fn terminate_ref(&mut self, _: AntiCallToken) -> Result<()> {
         unsafe {
-            pgrx::info!("writing segment: {:?}", self.path);
             const MAX_HEAP_TUPLE_SIZE: usize = unsafe { max_heap_tuple_size() };
             let mut sink = [0; MAX_HEAP_TUPLE_SIZE];
 

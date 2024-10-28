@@ -23,7 +23,6 @@ use crate::index::reader::index::FFType;
 use crate::index::WriterResources;
 use crate::postgres::index::open_search_index;
 use crate::postgres::storage::segment_handle::SegmentHandle;
-use crate::postgres::storage::segment_writer::SegmentWriter;
 use pgrx::{pg_sys::ItemPointerData, *};
 use std::io::Write;
 use tantivy::directory::FileHandle;

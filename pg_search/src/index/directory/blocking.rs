@@ -42,10 +42,10 @@ use thiserror::Error;
 
 use crate::index::atomic::AtomicDirectory;
 use crate::index::reader::file_handle::FileHandleReader;
+use crate::index::writer::io::IoWriter;
 use crate::index::WriterResources;
 use crate::postgres::storage::buffer::BufferCache;
 use crate::postgres::storage::segment_handle;
-use crate::postgres::storage::segment_writer;
 
 /// Defined by Tantivy in core/mod.rs
 pub static META_FILEPATH: Lazy<&'static Path> = Lazy::new(|| Path::new("meta.json"));
@@ -136,7 +136,7 @@ impl Directory for BlockingDirectory {
     fn open_write(&self, path: &Path) -> result::Result<WritePtr, OpenWriteError> {
         pgrx::info!("open_write: {:?}", path);
         Ok(io::BufWriter::new(Box::new(unsafe {
-            segment_writer::SegmentWriter::new(self.relation_oid, path)
+            IoWriter::new(self.relation_oid, path)
         })))
     }
 
