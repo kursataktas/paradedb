@@ -40,11 +40,12 @@ use tantivy::{schema::Field, Directory, Index};
 use thiserror::Error;
 
 use super::directory::{SearchDirectoryError, SearchFs, WriterDirectory};
+use crate::index::WriterResources;
 use crate::postgres::storage::atomic_directory::AtomicDirectory;
 use crate::postgres::storage::buffer::BufferCache;
-use crate::postgres::storage::segment_handle::SegmentHandle;
-use crate::postgres::storage::segment_reader::SegmentReader;
-use crate::postgres::storage::segment_writer::SegmentWriter;
+use crate::postgres::storage::segment_handle;
+use crate::postgres::storage::segment_reader;
+use crate::postgres::storage::segment_writer;
 
 /// Defined by Tantivy in core/mod.rs
 pub static META_FILEPATH: Lazy<&'static Path> = Lazy::new(|| Path::new("meta.json"));
@@ -68,7 +69,8 @@ impl BlockingDirectory {
     pub fn delete_with_stats(&self, path: &Path) -> result::Result<u32, DeleteError> {
         unsafe {
             let mut pages_deleted = 0;
-            let segment_handle = SegmentHandle::open(self.relation_oid, &path).unwrap();
+            let segment_handle =
+                segment_handle::SegmentHandle::open(self.relation_oid, &path).unwrap();
             if let Some(segment_handle) = segment_handle {
                 let cache = BufferCache::open(self.relation_oid);
                 let blocknos = segment_handle.internal().blocks();
@@ -99,12 +101,12 @@ impl BlockingDirectory {
 impl Directory for BlockingDirectory {
     fn get_file_handle(&self, path: &Path) -> Result<Arc<dyn FileHandle>, OpenReadError> {
         let handle = unsafe {
-            SegmentHandle::open(self.relation_oid, path)
+            segment_handle::SegmentHandle::open(self.relation_oid, path)
                 .unwrap()
                 .unwrap()
         };
 
-        Ok(Arc::new(SegmentReader::new(
+        Ok(Arc::new(segment_reader::SegmentReader::new(
             self.relation_oid,
             path,
             handle,
@@ -113,7 +115,7 @@ impl Directory for BlockingDirectory {
 
     fn open_write(&self, path: &Path) -> result::Result<WritePtr, OpenWriteError> {
         Ok(io::BufWriter::new(Box::new(unsafe {
-            SegmentWriter::new(self.relation_oid, path)
+            segment_writer::SegmentWriter::new(self.relation_oid, path)
         })))
     }
 
@@ -188,34 +190,59 @@ static mut PENDING_INDEX_DROPS: Lazy<HashSet<WriterDirectory>> = Lazy::new(HashS
 
 /// The entity that interfaces with Tantivy indexes.
 pub struct SearchIndexWriter {
-    // this is an Option<> because on drop we need to take ownership of the underlying
-    // IndexWriter instance so we can, in the background, wait for all merging threads to finish
-    pub underlying_writer: Option<indexer::SegmentWriter>,
+    pub underlying_index: Index,
+    pub underlying_writer: indexer::SegmentWriter,
     pub current_opstamp: tantivy::Opstamp,
+    pub segment: tantivy::Segment,
 }
 
 impl SearchIndexWriter {
+    pub fn new(index: Index, resources: WriterResources) -> Result<Self> {
+        let (_, memory_budget) = resources.resources();
+        let segment = index.new_segment();
+        let current_opstamp = index.load_metas()?.opstamp;
+        let underlying_writer =
+            indexer::SegmentWriter::for_segment(memory_budget, segment.clone())?;
+
+        Ok(Self {
+            underlying_index: index,
+            underlying_writer,
+            current_opstamp,
+            segment,
+        })
+    }
+
     pub fn insert(&mut self, document: SearchDocument) -> Result<(), IndexError> {
         // Add the Tantivy document to the index.
         let tantivy_document: tantivy::TantivyDocument = document.into();
         self.current_opstamp += 1;
-        self.underlying_writer
-            .as_mut()
-            .unwrap()
-            .add_document(AddOperation {
-                opstamp: self.current_opstamp,
-                document: tantivy_document,
-            })?;
+        self.underlying_writer.add_document(AddOperation {
+            opstamp: self.current_opstamp,
+            document: tantivy_document,
+        })?;
 
         Ok(())
     }
 
     pub fn commit(mut self) -> Result<()> {
         self.current_opstamp += 1;
-        self.underlying_writer
-            .unwrap()
-            .finalize()
-            .context("error committing to tantivy index")?;
+        self.underlying_writer.finalize()?;
+        let committed_meta = self.underlying_index.load_metas()?;
+        let mut segments = committed_meta.segments.clone();
+        segments.push(self.segment.meta().clone());
+
+        let new_meta = tantivy::IndexMeta {
+            segments,
+            opstamp: self.current_opstamp,
+            index_settings: committed_meta.index_settings,
+            schema: committed_meta.schema,
+            payload: committed_meta.payload,
+        };
+
+        self.underlying_index
+            .directory()
+            .atomic_write(*META_FILEPATH, &serde_json::to_vec(&new_meta)?)?;
+
         Ok(())
     }
 

@@ -101,15 +101,10 @@ impl SearchIndex {
     /// can get an exclusive lock on the Tantivy writer. The return type needs to
     /// be entirely owned by the new process, with no references.
     pub fn get_writer(&self, resources: WriterResources) -> Result<SearchIndexWriter> {
-        let (_, memory_budget) = resources.resources();
-        let segment = self.underlying_index.new_segment();
-        let writer = SegmentWriter::for_segment(memory_budget, segment.clone())?;
-        let current_opstamp = self.underlying_index.load_metas()?.opstamp;
-
-        Ok(SearchIndexWriter {
-            underlying_writer: Some(writer),
-            current_opstamp,
-        })
+        Ok(SearchIndexWriter::new(
+            self.underlying_index.clone(),
+            resources,
+        )?)
     }
 
     #[allow(static_mut_refs)]
