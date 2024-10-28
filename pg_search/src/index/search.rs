@@ -31,7 +31,7 @@ use anyhow::Result;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::num::NonZeroUsize;
-use tantivy::indexer::SingleSegmentIndexWriter;
+use tantivy::indexer::SegmentWriter;
 use tantivy::query::Query;
 use tantivy::{query::QueryParser, Executor, Index};
 use thiserror::Error;
@@ -102,10 +102,13 @@ impl SearchIndex {
     /// be entirely owned by the new process, with no references.
     pub fn get_writer(&self, resources: WriterResources) -> Result<SearchIndexWriter> {
         let (_, memory_budget) = resources.resources();
-        let underlying_writer =
-            SingleSegmentIndexWriter::new(self.underlying_index.clone(), memory_budget)?;
+        let segment = self.underlying_index.new_segment();
+        let writer = SegmentWriter::for_segment(memory_budget, segment.clone())?;
+        let current_opstamp = self.underlying_index.load_metas()?.opstamp;
+
         Ok(SearchIndexWriter {
-            underlying_writer: Some(underlying_writer),
+            underlying_writer: Some(writer),
+            current_opstamp,
         })
     }
 
@@ -191,26 +194,6 @@ impl SearchIndex {
         Ok(())
     }
 
-    /// Using the `should_delete` argument, determine, one-by-one, if a document in this index
-    /// needs to be deleted.
-    ///
-    /// This function is atomic in that it ensures the underlying changes to the tantivy index
-    /// are committed before returning an [`Ok`] response.
-    pub fn delete(
-        &self,
-        reader: &SearchIndexReader,
-        writer: &SearchIndexWriter,
-        should_delete: impl Fn(u64) -> bool,
-    ) -> Result<(u32, u32), SearchIndexError> {
-        let ctid_field = self.schema.ctid_field().id.0;
-        let (ctids_to_delete, not_deleted) = reader.get_ctids_to_delete(should_delete)?;
-        if !ctids_to_delete.is_empty() {
-            writer.delete(&ctid_field, &ctids_to_delete)?;
-        }
-
-        Ok((ctids_to_delete.len() as u32, not_deleted))
-    }
-
     pub fn drop_index(&mut self) -> Result<(), SearchIndexError> {
         // the index is about to be queued to drop and that requires our transaction callbacks be registered
         crate::postgres::transaction::register_callback();
@@ -219,11 +202,6 @@ impl SearchIndex {
         // deleted on commit, or in case it needs to be rolled back on abort.
         SearchIndexWriter::mark_pending_drop(&self.directory);
 
-        Ok(())
-    }
-
-    pub fn vacuum(&self, writer: &SearchIndexWriter) -> Result<(), SearchIndexError> {
-        writer.vacuum()?;
         Ok(())
     }
 }
