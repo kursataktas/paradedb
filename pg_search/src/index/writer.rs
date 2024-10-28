@@ -226,10 +226,12 @@ impl SearchIndexWriter {
 
     pub fn commit(mut self) -> Result<()> {
         self.current_opstamp += 1;
+        let max_doc = self.underlying_writer.max_doc();
         self.underlying_writer.finalize()?;
-        let committed_meta = self.underlying_index.load_metas()?;
+        let segment: tantivy::Segment = self.segment.with_max_doc(max_doc);
+        let committed_meta = segment.index().load_metas()?;
         let mut segments = committed_meta.segments.clone();
-        segments.push(self.segment.meta().clone());
+        segments.push(segment.meta().clone());
 
         let new_meta = tantivy::IndexMeta {
             segments,
@@ -243,6 +245,11 @@ impl SearchIndexWriter {
             .directory()
             .atomic_write(*META_FILEPATH, &serde_json::to_vec(&new_meta)?)?;
 
+        Ok(())
+    }
+
+    pub fn abort(self) -> Result<()> {
+        // self.underlying_writer.abort()?;
         Ok(())
     }
 
