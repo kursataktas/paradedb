@@ -61,13 +61,13 @@ impl AtomicDirectory {
         let mut vec = Vec::with_capacity(len);
         std::ptr::copy(item as *mut u8, vec.as_mut_ptr(), len);
         vec.set_len(len);
-
         pg_sys::ReleaseBuffer(buffer);
         vec
     }
 
     unsafe fn write_bytes(&self, data: &[u8], blockno: pg_sys::BlockNumber) {
-        let buffer = self.cache.get_buffer(blockno, Some(pg_sys::BUFFER_LOCK_EXCLUSIVE));
+        // It is our responsibility to ensure that this buffer is already locked and pinned
+        let buffer = self.cache.get_buffer(blockno, None);
         let page = pg_sys::BufferGetPage(buffer);
 
         if pg_sys::PageGetMaxOffsetNumber(page) == pg_sys::InvalidOffsetNumber {
@@ -88,6 +88,6 @@ impl AtomicDirectory {
         }
 
         pg_sys::MarkBufferDirty(buffer);
-        pg_sys::UnlockReleaseBuffer(buffer);
+        pg_sys::ReleaseBuffer(buffer);
     }
 }

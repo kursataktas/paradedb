@@ -75,6 +75,7 @@ impl BlockingLock {
 
 impl Drop for BlockingLock {
     fn drop(&mut self) {
+        pgrx::info!("BlockingLock drop");
         unsafe { pg_sys::UnlockReleaseBuffer(self.buffer) };
     }
 }
@@ -134,12 +135,14 @@ impl Directory for BlockingDirectory {
     }
 
     fn open_write(&self, path: &Path) -> result::Result<WritePtr, OpenWriteError> {
+        pgrx::info!("open_write: {:?}", path);
         Ok(io::BufWriter::new(Box::new(unsafe {
             segment_writer::SegmentWriter::new(self.relation_oid, path)
         })))
     }
 
     fn atomic_write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+        pgrx::info!("atomic_write: {:?}", path);
         let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
         if path.to_path_buf() == *META_FILEPATH {
             unsafe { directory.write_meta(data) };
@@ -194,6 +197,7 @@ impl Directory for BlockingDirectory {
             }
 
             if let Some(blockno) = blockno {
+                pgrx::info!("acquire_lock: {:?}", lock);
                 return Ok(DirectoryLock::from(Box::new(BlockingLock::new(
                     self.relation_oid,
                     blockno,
