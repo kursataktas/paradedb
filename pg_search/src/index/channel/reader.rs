@@ -6,9 +6,8 @@ use tantivy::directory::FileHandle;
 use tantivy::directory::OwnedBytes;
 use tantivy::HasLen;
 
+use crate::index::directory::channel::{ChannelRequest, ChannelResponse};
 use crate::postgres::storage::segment_handle::SegmentHandle;
-
-use super::directory::{ChannelRequest, ChannelResponse};
 
 #[derive(Clone, Debug)]
 pub struct ChannelReader {
