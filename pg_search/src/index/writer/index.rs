@@ -34,19 +34,18 @@ use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHa
 use tantivy::{
     directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError},
     directory::{MANAGED_LOCK, META_LOCK},
-    indexer::{self, AddOperation},
+    indexer::{AddOperation, SegmentWriter},
     IndexSettings,
 };
 use tantivy::{schema::Field, Directory, Index};
 use thiserror::Error;
 
-use super::directory::writer::{SearchDirectoryError, SearchFs, WriterDirectory};
 use crate::index::atomic::AtomicDirectory;
 use crate::index::directory::blocking::{BlockingDirectory, META_FILEPATH};
+use crate::index::directory::writer::{SearchDirectoryError, SearchFs, WriterDirectory};
 use crate::index::WriterResources;
 use crate::postgres::storage::buffer::BufferCache;
 use crate::postgres::storage::segment_handle;
-use crate::postgres::storage::segment_writer;
 
 /// A global store of which indexes have been created during a transaction,
 /// so that they can be committed or rolled back in case of an abort.
@@ -58,8 +57,7 @@ static mut PENDING_INDEX_DROPS: Lazy<HashSet<WriterDirectory>> = Lazy::new(HashS
 
 /// The entity that interfaces with Tantivy indexes.
 pub struct SearchIndexWriter {
-    pub underlying_index: Index,
-    pub underlying_writer: indexer::SegmentWriter,
+    pub underlying_writer: SegmentWriter,
     pub current_opstamp: tantivy::Opstamp,
     pub segment: tantivy::Segment,
 }
@@ -69,11 +67,9 @@ impl SearchIndexWriter {
         let (_, memory_budget) = resources.resources();
         let segment = index.new_segment();
         let current_opstamp = index.load_metas()?.opstamp;
-        let underlying_writer =
-            indexer::SegmentWriter::for_segment(memory_budget, segment.clone())?;
+        let underlying_writer = SegmentWriter::for_segment(memory_budget, segment.clone())?;
 
         Ok(Self {
-            underlying_index: index,
             underlying_writer,
             current_opstamp,
             segment,
@@ -97,7 +93,8 @@ impl SearchIndexWriter {
         let max_doc = self.underlying_writer.max_doc();
         self.underlying_writer.finalize()?;
         let segment = self.segment.with_max_doc(max_doc);
-        let committed_meta = segment.index().load_metas()?;
+        let index = segment.index();
+        let committed_meta = index.load_metas()?;
         let mut segments = committed_meta.segments.clone();
         segments.push(segment.meta().clone());
 
@@ -109,7 +106,7 @@ impl SearchIndexWriter {
             payload: committed_meta.payload,
         };
 
-        self.underlying_index
+        index
             .directory()
             .atomic_write(*META_FILEPATH, &serde_json::to_vec(&new_meta)?)?;
 

@@ -16,13 +16,13 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use super::reader::index::SearchIndexReader;
-use super::IndexError;
+use super::writer::index::IndexError;
 use crate::gucs;
 use crate::index::directory::blocking::BlockingDirectory;
 use crate::index::directory::writer::{
     SearchDirectoryError, SearchFs, TantivyDirPath, WriterDirectory,
 };
-use crate::index::SearchIndexWriter;
+use crate::index::writer::index::SearchIndexWriter;
 use crate::query::SearchQueryInput;
 use crate::schema::{
     SearchDocument, SearchField, SearchFieldConfig, SearchFieldName, SearchFieldType,

@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::IndexError;
+use crate::index::writer::index::IndexError;
 use crate::postgres::types::TantivyValue;
 use crate::schema::{SearchDocument, SearchFieldName, SearchIndexSchema};
 use pgrx::itemptr::{item_pointer_get_both, item_pointer_set_all};

@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::SearchIndexWriter;
+use crate::index::writer::index::SearchIndexWriter;
 use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::index::open_search_index;
 use crate::postgres::utils::row_to_search_document;
