@@ -48,6 +48,7 @@ impl Write for SegmentWriter {
 impl TerminatingWrite for SegmentWriter {
     fn terminate_ref(&mut self, _: AntiCallToken) -> Result<()> {
         unsafe {
+            pgrx::info!("writing segment: {:?}", self.path);
             const MAX_HEAP_TUPLE_SIZE: usize = unsafe { max_heap_tuple_size() };
             let mut sink = [0; MAX_HEAP_TUPLE_SIZE];
 

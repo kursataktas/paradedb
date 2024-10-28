@@ -10,15 +10,15 @@ pub(crate) struct AtomicSpecialData {
 // Handles Tantivy's atomic_read and atomic_write over block storage
 #[derive(Clone, Debug)]
 pub struct AtomicDirectory {
-    cache: BufferCache,
-    meta_blockno: pg_sys::BlockNumber,
-    managed_blockno: pg_sys::BlockNumber,
+    pub meta_blockno: pg_sys::BlockNumber,
+    pub managed_blockno: pg_sys::BlockNumber,
+    pub cache: BufferCache,
 }
 
 impl AtomicDirectory {
     pub unsafe fn new(relation_oid: u32) -> Self {
         let cache = BufferCache::open(relation_oid);
-        let buffer = cache.get_buffer(SEARCH_META_BLOCKNO, pg_sys::BUFFER_LOCK_SHARE);
+        let buffer = cache.get_buffer(SEARCH_META_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
         let page = pg_sys::BufferGetPage(buffer);
         let special = pg_sys::PageGetSpecialPointer(page) as *mut SegmentHandleSpecialData;
         let meta_blockno = (*special).meta_blockno;
@@ -51,7 +51,7 @@ impl AtomicDirectory {
 
     // TODO: Handle read_bytes and write_bytes where data is larger than a page
     unsafe fn read_bytes(&self, blockno: pg_sys::BlockNumber) -> Vec<u8> {
-        let buffer = self.cache.get_buffer(blockno, pg_sys::BUFFER_LOCK_SHARE);
+        let buffer = self.cache.get_buffer(blockno, None);
         let page = pg_sys::BufferGetPage(buffer);
         let special = pg_sys::PageGetSpecialPointer(page) as *mut AtomicSpecialData;
         let item_id = pg_sys::PageGetItemId(page, pg_sys::FirstOffsetNumber);
@@ -62,14 +62,12 @@ impl AtomicDirectory {
         std::ptr::copy(item as *mut u8, vec.as_mut_ptr(), len);
         vec.set_len(len);
 
-        pg_sys::UnlockReleaseBuffer(buffer);
+        pg_sys::ReleaseBuffer(buffer);
         vec
     }
 
     unsafe fn write_bytes(&self, data: &[u8], blockno: pg_sys::BlockNumber) {
-        let buffer = self
-            .cache
-            .get_buffer(blockno, pg_sys::BUFFER_LOCK_EXCLUSIVE);
+        let buffer = self.cache.get_buffer(blockno, None);
         let page = pg_sys::BufferGetPage(buffer);
 
         if pg_sys::PageGetMaxOffsetNumber(page) == pg_sys::InvalidOffsetNumber {
@@ -90,6 +88,6 @@ impl AtomicDirectory {
         }
 
         pg_sys::MarkBufferDirty(buffer);
-        pg_sys::UnlockReleaseBuffer(buffer);
+        pg_sys::ReleaseBuffer(buffer);
     }
 }
