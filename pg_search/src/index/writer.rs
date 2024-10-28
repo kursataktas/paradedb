@@ -65,6 +65,23 @@ pub struct BlockingLock {
     relation_oid: u32,
 }
 
+impl BlockingLock {
+    pub fn new(relation_oid: u32, blockno: Option<u32>) -> Self {
+        if let Some(blockno) = blockno {
+            unsafe {
+                let cache = BufferCache::open(relation_oid);
+                let buffer = cache.get_buffer(blockno, Some(pg_sys::BUFFER_LOCK_EXCLUSIVE));
+                pg_sys::ReleaseBuffer(buffer);
+            }
+        }
+
+        Self {
+            blockno,
+            relation_oid,
+        }
+    }
+}
+
 impl Drop for BlockingLock {
     fn drop(&mut self) {
         if let Some(blockno) = self.blockno {
@@ -138,7 +155,6 @@ impl Directory for BlockingDirectory {
     }
 
     fn atomic_write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
-        pgrx::info!("atomic_write: {:?}", path);
         let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
         if path.to_path_buf() == *META_FILEPATH {
             unsafe { directory.write_meta(data) };
@@ -187,24 +203,15 @@ impl Directory for BlockingDirectory {
             let mut blockno = None;
 
             if lock.filepath == (*META_LOCK).filepath {
-                let buffer = directory
-                    .cache
-                    .get_buffer(directory.meta_blockno, Some(pg_sys::BUFFER_LOCK_EXCLUSIVE));
                 blockno = Some(directory.meta_blockno);
-                pg_sys::ReleaseBuffer(buffer);
             } else if lock.filepath == (*MANAGED_LOCK).filepath {
-                let buffer = directory.cache.get_buffer(
-                    directory.managed_blockno,
-                    Some(pg_sys::BUFFER_LOCK_EXCLUSIVE),
-                );
                 blockno = Some(directory.managed_blockno);
-                pg_sys::ReleaseBuffer(buffer);
             }
 
-            Ok(DirectoryLock::from(Box::new(BlockingLock {
+            Ok(DirectoryLock::from(Box::new(BlockingLock::new(
+                self.relation_oid,
                 blockno,
-                relation_oid: self.relation_oid,
-            })))
+            ))))
         }
     }
 
