@@ -58,7 +58,7 @@ impl SegmentHandleInternal {
 impl SegmentHandle {
     pub unsafe fn open(relation_oid: u32, path: &Path) -> Result<Option<Self>> {
         let cache = BufferCache::open(relation_oid);
-        let buffer = cache.get_buffer(SEARCH_META_BLOCKNO, pg_sys::BUFFER_LOCK_SHARE);
+        let buffer = cache.get_buffer(SEARCH_META_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
         let blockno = pg_sys::BufferGetBlockNumber(buffer);
         let page = pg_sys::BufferGetPage(buffer);
         let special = pg_sys::PageGetSpecialPointer(page) as *mut SegmentHandleSpecialData;
@@ -96,7 +96,7 @@ impl SegmentHandle {
 
     pub unsafe fn create(relation_oid: u32, internal: SegmentHandleInternal) -> Self {
         let cache = BufferCache::open(relation_oid);
-        let mut buffer = cache.get_buffer(SEARCH_META_BLOCKNO, pg_sys::BUFFER_LOCK_SHARE);
+        let mut buffer = cache.get_buffer(SEARCH_META_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
         let mut page = pg_sys::BufferGetPage(buffer);
         let special = pg_sys::PageGetSpecialPointer(page) as *mut SegmentHandleSpecialData;
 

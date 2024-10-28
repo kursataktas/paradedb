@@ -41,7 +41,7 @@ impl FileHandle for SegmentReader {
             let mut data: Vec<u8> = vec![];
 
             for i in start_block..=end_block {
-                let buffer = cache.get_buffer(blocks[i], pg_sys::BUFFER_LOCK_SHARE);
+                let buffer = cache.get_buffer(blocks[i], None);
                 let page = pg_sys::BufferGetPage(buffer);
                 let item_id = pg_sys::PageGetItemId(page, pg_sys::FirstOffsetNumber);
                 let item = pg_sys::PageGetItem(page, item_id);
@@ -62,7 +62,7 @@ impl FileHandle for SegmentReader {
                 let slice = from_raw_parts(item.add(slice_start) as *const u8, slice_len);
                 data.extend_from_slice(slice);
 
-                pg_sys::UnlockReleaseBuffer(buffer);
+                pg_sys::ReleaseBuffer(buffer);
             }
 
             Ok(OwnedBytes::new(data))

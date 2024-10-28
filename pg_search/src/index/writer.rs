@@ -33,6 +33,7 @@ use std::{io, result};
 use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr};
 use tantivy::{
     directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError},
+    directory::{MANAGED_LOCK, META_LOCK},
     indexer::{self, AddOperation},
     IndexSettings,
 };
@@ -59,6 +60,23 @@ pub struct BlockingDirectory {
     relation_oid: u32,
 }
 
+pub struct BlockingLock {
+    blockno: Option<u32>,
+    relation_oid: u32,
+}
+
+impl Drop for BlockingLock {
+    fn drop(&mut self) {
+        if let Some(blockno) = self.blockno {
+            unsafe {
+                let cache = BufferCache::open(self.relation_oid);
+                let buffer = cache.get_buffer(blockno, None);
+                pg_sys::UnlockReleaseBuffer(buffer);
+            }
+        }
+    }
+}
+
 impl BlockingDirectory {
     pub fn new(relation_oid: u32) -> Self {
         Self { relation_oid }
@@ -75,7 +93,7 @@ impl BlockingDirectory {
                 let cache = BufferCache::open(self.relation_oid);
                 let blocknos = segment_handle.internal().blocks();
                 for blockno in blocknos {
-                    let buffer = cache.get_buffer(blockno, pg_sys::BUFFER_LOCK_EXCLUSIVE);
+                    let buffer = cache.get_buffer(blockno, None);
                     let page = pg_sys::BufferGetPage(buffer);
 
                     let max_offset = pg_sys::PageGetMaxOffsetNumber(page);
@@ -87,7 +105,7 @@ impl BlockingDirectory {
 
                     cache.record_free_index_page(blockno);
                     pg_sys::MarkBufferDirty(buffer);
-                    pg_sys::UnlockReleaseBuffer(buffer);
+                    pg_sys::ReleaseBuffer(buffer);
 
                     pages_deleted += 1;
                 }
@@ -120,6 +138,7 @@ impl Directory for BlockingDirectory {
     }
 
     fn atomic_write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+        pgrx::info!("atomic_write: {:?}", path);
         let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
         if path.to_path_buf() == *META_FILEPATH {
             unsafe { directory.write_meta(data) };
@@ -136,6 +155,7 @@ impl Directory for BlockingDirectory {
     }
 
     fn atomic_read(&self, path: &Path) -> result::Result<Vec<u8>, OpenReadError> {
+        pgrx::info!("atomic_read: {:?}", path);
         let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
         let data = if path.to_path_buf() == *META_FILEPATH {
             unsafe { directory.read_meta() }
@@ -162,17 +182,37 @@ impl Directory for BlockingDirectory {
     }
 
     fn acquire_lock(&self, lock: &Lock) -> result::Result<DirectoryLock, LockError> {
-        // The lock itself doesn't seem to actually be used anywhere by Tantivy
-        // acquire_lock seems to be a place for us to implement our own locking behavior
-        // which we don't need since pg_sys::ReadBuffer is already handling this
-        Ok(DirectoryLock::from(Box::new(Lock {
-            filepath: lock.filepath.clone(),
-            is_blocking: true,
-        })))
+        unsafe {
+            let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
+            let mut blockno = None;
+
+            if lock.filepath == (*META_LOCK).filepath {
+                let buffer = directory
+                    .cache
+                    .get_buffer(directory.meta_blockno, Some(pg_sys::BUFFER_LOCK_EXCLUSIVE));
+                blockno = Some(directory.meta_blockno);
+                pg_sys::ReleaseBuffer(buffer);
+            } else if lock.filepath == (*MANAGED_LOCK).filepath {
+                let buffer = directory.cache.get_buffer(
+                    directory.managed_blockno,
+                    Some(pg_sys::BUFFER_LOCK_EXCLUSIVE),
+                );
+                blockno = Some(directory.managed_blockno);
+                pg_sys::ReleaseBuffer(buffer);
+            }
+
+            Ok(DirectoryLock::from(Box::new(BlockingLock {
+                blockno,
+                relation_oid: self.relation_oid,
+            })))
+        }
     }
 
+    // Internally, tantivy only uses this API to detect new commits to implement the
+    // `OnCommitWithDelay` `ReloadPolicy`. Not implementing watch in a `Directory` only prevents
+    // the `OnCommitWithDelay` `ReloadPolicy` to work properly.
     fn watch(&self, watch_callback: WatchCallback) -> tantivy::Result<WatchHandle> {
-        todo!("directory watch");
+        unimplemented!("OnCommitWithDelay ReloadPolicy not supported");
     }
 
     fn sync_directory(&self) -> io::Result<()> {
@@ -229,7 +269,7 @@ impl SearchIndexWriter {
         self.current_opstamp += 1;
         let max_doc = self.underlying_writer.max_doc();
         self.underlying_writer.finalize()?;
-        let segment: tantivy::Segment = self.segment.with_max_doc(max_doc);
+        let segment = self.segment.with_max_doc(max_doc);
         let committed_meta = segment.index().load_metas()?;
         let mut segments = committed_meta.segments.clone();
         segments.push(segment.meta().clone());
