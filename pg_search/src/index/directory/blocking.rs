@@ -15,37 +15,25 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::{
-    index::SearchIndex,
-    postgres::types::TantivyValueError,
-    schema::{
-        SearchDocument, SearchFieldConfig, SearchFieldName, SearchFieldType, SearchIndexSchema,
-    },
-};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use once_cell::sync::Lazy;
 use pgrx::pg_sys;
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::{collections::HashSet, path::Path};
+use std::path::Path;
 use std::{io, result};
 use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr};
 use tantivy::{
     directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError},
     directory::{MANAGED_LOCK, META_LOCK},
-    indexer::{self, AddOperation},
-    IndexSettings,
 };
-use tantivy::{schema::Field, Directory, Index};
-use thiserror::Error;
+use tantivy::Directory;
 
 use crate::index::atomic::AtomicDirectory;
 use crate::index::reader::file_handle::FileHandleReader;
+use crate::index::segment_handle::SegmentHandle;
 use crate::index::writer::io::IoWriter;
-use crate::index::WriterResources;
-use crate::postgres::storage::buffer::BufferCache;
-use crate::postgres::storage::segment_handle;
+use crate::postgres::buffer::BufferCache;
 
 /// Defined by Tantivy in core/mod.rs
 pub static META_FILEPATH: Lazy<&'static Path> = Lazy::new(|| Path::new("meta.json"));
@@ -89,8 +77,7 @@ impl BlockingDirectory {
     pub fn delete_with_stats(&self, path: &Path) -> result::Result<u32, DeleteError> {
         unsafe {
             let mut pages_deleted = 0;
-            let segment_handle =
-                segment_handle::SegmentHandle::open(self.relation_oid, &path).unwrap();
+            let segment_handle = SegmentHandle::open(self.relation_oid, path).unwrap();
             if let Some(segment_handle) = segment_handle {
                 let cache = BufferCache::open(self.relation_oid);
                 let blocknos = segment_handle.internal().blocks();
@@ -121,7 +108,7 @@ impl BlockingDirectory {
 impl Directory for BlockingDirectory {
     fn get_file_handle(&self, path: &Path) -> Result<Arc<dyn FileHandle>, OpenReadError> {
         let handle = unsafe {
-            segment_handle::SegmentHandle::open(self.relation_oid, path)
+            SegmentHandle::open(self.relation_oid, path)
                 .unwrap()
                 .unwrap()
         };
@@ -189,23 +176,23 @@ impl Directory for BlockingDirectory {
             let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
             let mut blockno = None;
 
-            if lock.filepath == (*META_LOCK).filepath {
+            if lock.filepath == META_LOCK.filepath {
                 blockno = Some(directory.meta_blockno);
-            } else if lock.filepath == (*MANAGED_LOCK).filepath {
+            } else if lock.filepath == MANAGED_LOCK.filepath {
                 blockno = Some(directory.managed_blockno);
             }
 
             if let Some(blockno) = blockno {
                 pgrx::info!("acquire_lock: {:?}", lock);
-                return Ok(DirectoryLock::from(Box::new(BlockingLock::new(
+                Ok(DirectoryLock::from(Box::new(BlockingLock::new(
                     self.relation_oid,
                     blockno,
-                ))));
+                ))))
             } else {
-                return Err(LockError::wrap_io_error(io::Error::new(
+                Err(LockError::wrap_io_error(io::Error::new(
                     io::ErrorKind::Other,
                     format!("acquire_lock unexpected lock {:?}", lock),
-                )));
+                )))
             }
         }
     }

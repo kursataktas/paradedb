@@ -18,11 +18,11 @@
 use crate::index::directory::atomic::AtomicSpecialData;
 use crate::index::directory::writer::WriterDirectory;
 use crate::index::{SearchIndex, WriterResources};
+use crate::postgres::buffer::{BufferCache, SEARCH_META_BLOCKNO};
 use crate::postgres::index::relfilenode_from_pg_relation;
-use crate::postgres::insert::{init_insert_state, InsertState};
+use crate::postgres::insert::init_insert_state;
 use crate::postgres::options::SearchIndexCreateOptions;
-use crate::postgres::storage::buffer::{BufferCache, SEARCH_META_BLOCKNO};
-use crate::postgres::storage::segment_handle::SegmentHandleSpecialData;
+use crate::index::segment_handle::SegmentHandleSpecialData;
 use crate::postgres::utils::row_to_search_document;
 use crate::schema::{IndexRecordOption, SearchFieldConfig, SearchFieldName, SearchFieldType};
 use pgrx::*;
@@ -244,7 +244,7 @@ pub extern "C" fn ambuild(
     SearchIndex::create_index(directory, fields, key_field_index)
         .expect("error creating new index instance");
 
-    let mut state = do_heap_scan(index_info, &heap_relation, &index_relation);
+    let state = do_heap_scan(index_info, &heap_relation, &index_relation);
     unsafe {
         let insert_state = init_insert_state(indexrel, index_info, WriterResources::CreateIndex);
         (*insert_state).try_commit().expect("commit should succeed");

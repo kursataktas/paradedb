@@ -1,4 +1,4 @@
-use crate::postgres::storage::buffer::{BufferCache, SEARCH_META_BLOCKNO};
+use crate::postgres::buffer::{BufferCache, SEARCH_META_BLOCKNO};
 use anyhow::Result;
 use pgrx::*;
 use serde::{Deserialize, Serialize};

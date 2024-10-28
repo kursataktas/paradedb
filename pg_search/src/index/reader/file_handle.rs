@@ -7,8 +7,8 @@ use tantivy::directory::FileHandle;
 use tantivy::directory::OwnedBytes;
 use tantivy::HasLen;
 
-use crate::postgres::storage::buffer::BufferCache;
-use crate::postgres::storage::segment_handle::SegmentHandle;
+use crate::postgres::buffer::BufferCache;
+use crate::index::segment_handle::SegmentHandle;
 use crate::postgres::utils::max_heap_tuple_size;
 
 #[derive(Clone, Debug)]

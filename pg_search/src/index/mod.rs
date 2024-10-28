@@ -20,8 +20,8 @@ pub mod fast_fields_helper;
 mod merge_policy;
 pub mod reader;
 pub mod search;
+pub mod segment_handle;
 pub mod writer;
 
 pub use directory::*;
 pub use search::*;
-pub use writer::*;

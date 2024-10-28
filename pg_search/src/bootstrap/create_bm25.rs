@@ -21,8 +21,8 @@ use pgrx::{JsonB, PgRelation, Spi};
 use serde_json::Value;
 use std::collections::HashSet;
 
-use crate::index::directory::writer::{SearchFs, WriterDirectory};
-use crate::postgres::index::{open_search_index, relfilenode_from_pg_relation};
+use crate::index::directory::writer::SearchFs;
+use crate::postgres::index::open_search_index;
 
 #[pg_extern(
     sql = "

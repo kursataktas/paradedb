@@ -22,13 +22,9 @@ use crate::index::directory::channel::{
 use crate::index::reader::index::FFType;
 use crate::index::WriterResources;
 use crate::postgres::index::open_search_index;
-use crate::postgres::storage::segment_handle::SegmentHandle;
 use pgrx::{pg_sys::ItemPointerData, *};
-use std::io::Write;
-use tantivy::directory::FileHandle;
 use tantivy::index::Index;
 use tantivy::indexer::IndexWriter;
-use tantivy::Directory;
 
 #[pg_guard]
 pub extern "C" fn ambulkdelete(
