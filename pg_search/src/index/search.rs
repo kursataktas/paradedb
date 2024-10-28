@@ -19,9 +19,8 @@ use super::reader::SearchIndexReader;
 use super::IndexError;
 use crate::gucs;
 use crate::index::SearchIndexWriter;
-use crate::index::{
-    BlockingDirectory, SearchDirectoryError, SearchFs, TantivyDirPath, WriterDirectory,
-};
+use crate::index::BlockingDirectory;
+use crate::index::directory::writer::{SearchDirectoryError, SearchFs, TantivyDirPath, WriterDirectory};
 use crate::query::SearchQueryInput;
 use crate::schema::{
     SearchDocument, SearchField, SearchFieldConfig, SearchFieldName, SearchFieldType,

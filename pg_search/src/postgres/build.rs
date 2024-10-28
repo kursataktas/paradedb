@@ -15,13 +15,13 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::WriterDirectory;
+use crate::index::directory::atomic::AtomicSpecialData;
+use crate::index::directory::writer::WriterDirectory;
 use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::index::relfilenode_from_pg_relation;
 use crate::postgres::insert::{init_insert_state, InsertState};
 use crate::postgres::options::SearchIndexCreateOptions;
-use crate::postgres::storage::atomic_directory::AtomicSpecialData;
-use crate::postgres::storage::buffer::BufferCache;
+use crate::postgres::storage::buffer::{BufferCache, SEARCH_META_BLOCKNO};
 use crate::postgres::storage::segment_handle::SegmentHandleSpecialData;
 use crate::postgres::utils::row_to_search_document;
 use crate::schema::{IndexRecordOption, SearchFieldConfig, SearchFieldName, SearchFieldType};
@@ -31,10 +31,6 @@ use std::ffi::CStr;
 use std::time::Instant;
 use tokenizers::manager::SearchTokenizerFilters;
 use tokenizers::{SearchNormalizer, SearchTokenizer};
-
-// The first block of the index is the metadata block, which is essentially a map for how the rest of the blocks are organized.
-// It is our responsibility to ensure that the metadata block is the first block by creating it immediately when the index is built.
-pub const SEARCH_META_BLOCKNO: pg_sys::BlockNumber = 0;
 
 // For now just pass the count on the build callback state
 struct BuildState {

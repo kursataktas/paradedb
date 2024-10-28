@@ -15,7 +15,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::{SearchIndex, SearchIndexError, WriterDirectory};
+use crate::index::{SearchIndex, SearchIndexError};
+use crate::index::directory::writer::WriterDirectory;
 use pgrx::{pg_sys, PgRelation};
 
 /// Open the underlying [`SearchIndex`] for the specified Postgres index relation

@@ -1,6 +1,10 @@
 use pgrx::*;
 use std::ptr::null_mut;
 
+// The first block of the index is the metadata block, which is essentially a map for how the rest of the blocks are organized.
+// It is our responsibility to ensure that the metadata block is the first block by creating it immediately when the index is built.
+pub const SEARCH_META_BLOCKNO: pg_sys::BlockNumber = 0;
+
 // Reads and writes buffers from the buffer cache for a pg_sys::Relation
 #[derive(Clone, Debug)]
 pub struct BufferCache {
