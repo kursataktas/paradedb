@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::SearchFs;
+use crate::index::directory::writer::SearchFs;
 use crate::index::SearchIndexWriter;
 use pgrx::{pg_guard, pg_sys};
 use tracing::warn;
