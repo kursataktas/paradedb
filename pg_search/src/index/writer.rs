@@ -40,9 +40,9 @@ use tantivy::{
 use tantivy::{schema::Field, Directory, Index};
 use thiserror::Error;
 
-use super::directory::{SearchDirectoryError, SearchFs, WriterDirectory};
+use super::directory::writer::{SearchDirectoryError, SearchFs, WriterDirectory};
+use crate::index::atomic::AtomicDirectory;
 use crate::index::WriterResources;
-use crate::index::directory::AtomicDirectory;
 use crate::postgres::storage::buffer::BufferCache;
 use crate::postgres::storage::segment_handle;
 use crate::postgres::storage::segment_reader;

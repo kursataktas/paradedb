@@ -15,8 +15,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-pub use crate::index::SearchFs;
 use crate::index::directory::writer::{SearchDirectoryError, TantivyDirPath, WriterDirectory};
+pub use crate::index::SearchFs;
 use serde::{de::DeserializeOwned, Serialize};
 
 pub struct MockWriterDirectory {
