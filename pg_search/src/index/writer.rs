@@ -249,7 +249,7 @@ impl SearchIndexWriter {
     }
 
     pub fn abort(self) -> Result<()> {
-        // self.underlying_writer.abort()?;
+        // TODO: Implement rollback
         Ok(())
     }
 
