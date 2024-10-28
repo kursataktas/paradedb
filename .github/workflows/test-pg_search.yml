@@ -17,8 +17,9 @@ on:
       - "tests/**"
       - "tokenizers/**"
   push:
-    branches:
-      - dev # Also run on dev to fill the GitHub Actions Rust cache in a way that pull requests can see it
+    branches: # Also run on `dev` and `main` to fill the GitHub Actions Rust cache in a way that PRs can see it
+      - dev
+      - main
     paths:
       - "**/*.rs"
       - "**/*.toml"
@@ -108,6 +109,7 @@ jobs:
           key: ${{ matrix.pg_version }}-${{ steps.pgrx.outputs.version }}
           cache-targets: true
           cache-all-crates: true
+          save-if: ${{ github.ref == 'refs/heads/dev' }}
 
       - name: Install required system tools
         if: steps.check_skip.outputs.skip_remaining_steps != 'true'
@@ -235,6 +237,7 @@ jobs:
           key: ${{ matrix.pg_version }}-${{ steps.pgrx.outputs.version }}
           cache-targets: true
           cache-all-crates: true
+          save-if: ${{ github.ref == 'refs/heads/dev' }}
 
       - name: Install required system tools
         if: steps.check_skip.outputs.skip_remaining_steps != 'true'

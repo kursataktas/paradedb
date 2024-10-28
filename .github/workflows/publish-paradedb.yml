@@ -28,9 +28,9 @@ permissions:
   attestations: write
 
 jobs:
-  publish-paradedb-container-image:
+  publish-paradedb-docker-image:
     name: Publish ParadeDB Docker Image for PostgreSQL ${{ matrix.pg_version }}
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         pg_version: [13, 14, 15, 16, 17]
@@ -54,7 +54,10 @@ jobs:
           fi
           echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-      # The pg_version-tag Docker tag syntax is necessary for our K8s CloudNativePG Helm chart
+      - name: Configure Depot CLI
+        uses: depot/setup-action@v1
+
+      # The pg_version-tag Docker tag syntax is necessary for our CloudNativePG Helm chart
       - name: Setup Docker Image tags
         id: meta
         uses: docker/metadata-action@v5
@@ -72,18 +75,9 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
 
-      - name: Set up Docker Buildx with Build Cloud
-        uses: docker/setup-buildx-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
-          version: lab:latest
-          driver: cloud
-          endpoint: ${{ secrets.DOCKERHUB_USERNAME }}/paradedb
-          install: true
-
       - name: Build and Push Docker Image to Docker Hub
         id: build-push
-        uses: docker/build-push-action@v6
+        uses: depot/build-push-action@v1
         with:
           context: .
           build-args: |
@@ -95,6 +89,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           file: docker/Dockerfile
           push: true
+          project: ${{ secrets.DEPOT_PROJECT }}
+          token: ${{ secrets.DEPOT_TOKEN }}
           tags: ${{ steps.meta.outputs.tags }}
 
       - name: Sign and Attest Build Provenance
@@ -106,7 +102,7 @@ jobs:
 
   publish-paradedb-helm-chart:
     name: Publish ParadeDB Helm Chart for PostgreSQL ${{ matrix.pg_version }}
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         pg_version: [17]
