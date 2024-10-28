@@ -42,11 +42,10 @@ use thiserror::Error;
 
 use super::directory::writer::{SearchDirectoryError, SearchFs, WriterDirectory};
 use crate::index::atomic::AtomicDirectory;
-use crate::index::WriterResources;
 use crate::index::directory::blocking::{BlockingDirectory, META_FILEPATH};
+use crate::index::WriterResources;
 use crate::postgres::storage::buffer::BufferCache;
 use crate::postgres::storage::segment_handle;
-use crate::postgres::storage::segment_reader;
 use crate::postgres::storage::segment_writer;
 
 /// A global store of which indexes have been created during a transaction,

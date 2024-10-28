@@ -63,11 +63,11 @@ impl From<u32> for SortDirection {
 const SORT_ASCENDING: u32 = pg_sys::BTLessStrategyNumber;
 const SORT_DESCENDING: u32 = pg_sys::BTGreaterStrategyNumber;
 
-impl From<SortDirection> for crate::index::reader::SortDirection {
+impl From<SortDirection> for crate::index::reader::index::SortDirection {
     fn from(value: SortDirection) -> Self {
         match value {
-            SortDirection::Asc => crate::index::reader::SortDirection::Asc,
-            SortDirection::Desc => crate::index::reader::SortDirection::Desc,
+            SortDirection::Asc => crate::index::reader::index::SortDirection::Asc,
+            SortDirection::Desc => crate::index::reader::index::SortDirection::Desc,
         }
     }
 }

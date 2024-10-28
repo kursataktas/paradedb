@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use super::SearchIndex;
+use crate::index::SearchIndex;
 use crate::postgres::types::TantivyValue;
 use crate::query::SearchQueryInput;
 use crate::schema::{SearchFieldName, SearchIndexSchema};
@@ -619,8 +619,7 @@ impl FFType {
 }
 
 mod collector {
-    use crate::index::reader::FFType;
-    use crate::index::reader::SearchIndexScore;
+    use crate::index::reader::index::{FFType, SearchIndexScore};
     use tantivy::collector::{Collector, SegmentCollector};
     use tantivy::{DocAddress, DocId, Score, SegmentOrdinal, SegmentReader};
 
@@ -726,8 +725,7 @@ mod collector {
 }
 
 mod vec_collector {
-    use crate::index::reader::FFType;
-    use crate::index::reader::SearchIndexScore;
+    use crate::index::reader::index::{FFType, SearchIndexScore};
     use pgrx::check_for_interrupts;
     use tantivy::collector::{Collector, SegmentCollector};
     use tantivy::{DocAddress, DocId, Score, SegmentOrdinal, SegmentReader};

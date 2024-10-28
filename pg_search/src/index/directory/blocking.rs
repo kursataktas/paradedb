@@ -41,10 +41,10 @@ use tantivy::{schema::Field, Directory, Index};
 use thiserror::Error;
 
 use crate::index::atomic::AtomicDirectory;
+use crate::index::reader::file_handle::FileHandleReader;
 use crate::index::WriterResources;
 use crate::postgres::storage::buffer::BufferCache;
 use crate::postgres::storage::segment_handle;
-use crate::postgres::storage::segment_reader;
 use crate::postgres::storage::segment_writer;
 
 /// Defined by Tantivy in core/mod.rs
@@ -126,7 +126,7 @@ impl Directory for BlockingDirectory {
                 .unwrap()
         };
 
-        Ok(Arc::new(segment_reader::SegmentReader::new(
+        Ok(Arc::new(FileHandleReader::new(
             self.relation_oid,
             path,
             handle,

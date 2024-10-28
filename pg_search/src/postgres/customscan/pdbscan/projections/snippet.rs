@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::reader::SearchIndexReader;
+use crate::index::reader::index::SearchIndexReader;
 use crate::nodecast;
 use pgrx::pg_sys::expression_tree_walker;
 use pgrx::{

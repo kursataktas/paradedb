@@ -12,11 +12,11 @@ use tantivy::directory::error::{DeleteError, LockError, OpenReadError, OpenWrite
 use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr};
 use tantivy::Directory;
 
-use crate::index::channel::reader::ChannelReader;
 use crate::index::channel::writer::ChannelWriter;
 use crate::index::directory::blocking::BlockingDirectory;
+use crate::index::reader::channel::ChannelReader;
+use crate::index::reader::file_handle::FileHandleReader;
 use crate::postgres::storage::segment_handle::SegmentHandle;
-use crate::postgres::storage::segment_reader::SegmentReader;
 use crate::postgres::storage::segment_writer::SegmentWriter;
 
 #[derive(Debug)]
@@ -223,7 +223,7 @@ impl ChannelRequestHandler {
                     self.sender.send(ChannelResponse::SegmentHandle(handle))?;
                 }
                 ChannelRequest::SegmentRead(path, range, handle) => {
-                    let reader = SegmentReader::new(self.relation_oid, &path, handle);
+                    let reader = FileHandleReader::new(self.relation_oid, &path, handle);
                     let data = reader.read_bytes(range)?;
                     self.sender
                         .send(ChannelResponse::Bytes(data.as_slice().to_owned()))?;

@@ -12,13 +12,13 @@ use crate::postgres::storage::segment_handle::SegmentHandle;
 use crate::postgres::utils::max_heap_tuple_size;
 
 #[derive(Clone, Debug)]
-pub struct SegmentReader {
+pub struct FileHandleReader {
     path: PathBuf,
     handle: SegmentHandle,
     relation_oid: u32,
 }
 
-impl SegmentReader {
+impl FileHandleReader {
     pub fn new(relation_oid: u32, path: &Path, handle: SegmentHandle) -> Self {
         Self {
             path: path.to_path_buf(),
@@ -28,7 +28,7 @@ impl SegmentReader {
     }
 }
 
-impl FileHandle for SegmentReader {
+impl FileHandle for FileHandleReader {
     fn read_bytes(&self, range: Range<usize>) -> Result<OwnedBytes, std::io::Error> {
         unsafe {
             const MAX_HEAP_TUPLE_SIZE: usize = unsafe { max_heap_tuple_size() };
@@ -70,7 +70,7 @@ impl FileHandle for SegmentReader {
     }
 }
 
-impl HasLen for SegmentReader {
+impl HasLen for FileHandleReader {
     fn len(&self) -> usize {
         self.handle.internal().total_bytes()
     }

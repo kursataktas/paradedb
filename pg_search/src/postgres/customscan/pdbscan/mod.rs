@@ -26,7 +26,7 @@ use crate::api::operator::{
     anyelement_query_input_opoid, attname_from_var, estimate_selectivity, find_var_relation,
 };
 use crate::api::{AsCStr, AsInt, Cardinality};
-use crate::index::reader::SearchIndexScore;
+use crate::index::reader::index::SearchIndexScore;
 use crate::index::SearchIndex;
 use crate::postgres::customscan::builders::custom_path::{CustomPathBuilder, Flags, OrderByStyle};
 use crate::postgres::customscan::builders::custom_scan::CustomScanBuilder;

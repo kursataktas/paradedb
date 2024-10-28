@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use super::reader::SearchIndexReader;
+use super::reader::index::SearchIndexReader;
 use super::IndexError;
 use crate::gucs;
 use crate::index::directory::blocking::BlockingDirectory;
