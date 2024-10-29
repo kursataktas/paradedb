@@ -188,11 +188,7 @@ impl SearchIndex {
         writer: &mut SearchIndexWriter,
         document: SearchDocument,
     ) -> Result<(), SearchIndexError> {
-        // the index is about to change, and that requires our transaction callbacks be registered
-        crate::postgres::transaction::register_callback();
-
         writer.insert(document)?;
-
         Ok(())
     }
 }
