@@ -77,6 +77,7 @@ impl TerminatingWrite for IoWriter {
                 pg_sys::UnlockReleaseBuffer(buffer);
             }
 
+            eprintln!("creating segment handle for {:?}", self.path);
             SegmentHandle::create(self.relation_oid, &self.path, blocks, total_bytes);
             Ok(())
         }

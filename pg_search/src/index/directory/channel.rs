@@ -10,7 +10,7 @@ use std::{
     result,
 };
 use tantivy::directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError};
-use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr};
+use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr, TerminatingWrite};
 use tantivy::Directory;
 
 use crate::index::directory::blocking::{BlockingDirectory, BlockingLock};
@@ -101,6 +101,7 @@ impl Directory for ChannelDirectory {
     }
 
     fn open_write(&self, path: &Path) -> result::Result<WritePtr, OpenWriteError> {
+        eprintln!("channel open write {:?}", path);
         Ok(io::BufWriter::new(Box::new(unsafe {
             ChannelWriter::new(path, self.sender.clone(), self.receiver.clone())
         })))
@@ -264,8 +265,10 @@ impl ChannelRequestHandler {
                         .send(ChannelResponse::Bytes(data.as_slice().to_owned()))?;
                 }
                 ChannelRequest::SegmentWrite(path, data) => {
+                    eprintln!("ChannelRequest::SegmentWrite {:?}", path);
                     let mut writer = unsafe { IoWriter::new(self.relation_oid, &path) };
                     writer.write_all(data.get_ref())?;
+                    writer.terminate()?;
                     self.sender.send(ChannelResponse::SegmentWriteAck)?;
                 }
                 ChannelRequest::SegmentDelete(path) => {

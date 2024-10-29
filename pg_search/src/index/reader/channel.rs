@@ -26,7 +26,9 @@ impl ChannelReader {
             .send(ChannelRequest::GetSegmentHandle(path.to_path_buf()))
             .unwrap();
         let handle = match receiver.recv().unwrap() {
-            ChannelResponse::SegmentHandle(handle) => handle.expect("SegmentHandle should exist"),
+            ChannelResponse::SegmentHandle(handle) => {
+                handle.expect(format!("SegmentHandle for {} should exist", path.display()).as_str())
+            }
             unexpected => panic!("SegmentHandle expected, got {:?}", unexpected),
         };
 

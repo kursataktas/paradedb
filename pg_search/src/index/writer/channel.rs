@@ -50,6 +50,7 @@ impl Write for ChannelWriter {
 
 impl TerminatingWrite for ChannelWriter {
     fn terminate_ref(&mut self, _: AntiCallToken) -> Result<()> {
+        eprintln!("ChannelWriter::terminate_ref");
         self.sender
             .send(ChannelRequest::SegmentWrite(
                 self.path.clone(),
