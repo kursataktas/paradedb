@@ -265,7 +265,6 @@ impl ChannelRequestHandler {
                         .send(ChannelResponse::Bytes(data.as_slice().to_owned()))?;
                 }
                 ChannelRequest::SegmentWrite(path, data) => {
-                    eprintln!("ChannelRequest::SegmentWrite {:?}", path);
                     let mut writer = unsafe { IoWriter::new(self.relation_oid, &path) };
                     writer.write_all(data.get_ref())?;
                     writer.terminate()?;
