@@ -17,14 +17,12 @@
 
 mod api;
 mod bootstrap;
-mod env;
 mod index;
 mod postgres;
 mod query;
 mod schema;
 
 #[cfg(test)]
-pub mod fixtures;
 pub mod github;
 pub mod gucs;
 pub mod telemetry;

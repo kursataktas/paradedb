@@ -15,7 +15,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::directory::writer::SearchFs;
 use crate::index::writer::index::SearchIndexWriter;
 use pgrx::{pg_guard, pg_sys};
 use tracing::warn;
@@ -47,14 +46,8 @@ unsafe extern "C" fn pg_search_xact_callback(
 ) {
     match event {
         pg_sys::XactEvent::XACT_EVENT_PRE_COMMIT => {
-            // first, indexes in our cache that are pending a DROP need to be dropped
-            for directory in SearchIndexWriter::pending_drops() {
-                directory.remove().unwrap_or_else(|err| {
-                    warn!(
-                        "unexpected error removing index directory during pre-commit: {:?}; {:?}",
-                        directory, err
-                    )
-                });
+            for _directory in SearchIndexWriter::pending_drops() {
+                todo!("handle any pre-commit drop callback required in block storage")
             }
 
             // finally, any indexes that are marked as pending create are now created because the
@@ -65,13 +58,8 @@ unsafe extern "C" fn pg_search_xact_callback(
 
         pg_sys::XactEvent::XACT_EVENT_ABORT => {
             // first, indexes in our cache that are pending a CREATE need to be dropped
-            for directory in SearchIndexWriter::pending_creates() {
-                directory.remove().unwrap_or_else(|err| {
-                    warn!(
-                        "unexpected error removing index directory during abort: {:?}; {:?}",
-                        directory, err
-                    )
-                });
+            for _directory in SearchIndexWriter::pending_creates() {
+                todo!("handle any pre-commit pending create callback required in block storage")
             }
 
             SearchIndexWriter::clear_pending_drops();

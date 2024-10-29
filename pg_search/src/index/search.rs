@@ -19,7 +19,7 @@ use super::reader::index::SearchIndexReader;
 use super::writer::index::IndexError;
 use crate::gucs;
 use crate::index::directory::blocking::BlockingDirectory;
-use crate::index::directory::writer::{SearchDirectoryError, SearchFs, WriterDirectory};
+use crate::index::directory::writer::SearchIndexEntity;
 use crate::index::writer::index::SearchIndexWriter;
 use crate::query::SearchQueryInput;
 use crate::schema::{
@@ -70,25 +70,18 @@ impl WriterResources {
 #[derive(Serialize)]
 pub struct SearchIndex {
     pub schema: SearchIndexSchema,
-    pub directory: WriterDirectory,
+    pub directory: SearchIndexEntity,
     #[serde(skip_serializing)]
     pub underlying_index: Index,
 }
 
 impl SearchIndex {
     pub fn create_index(
-        directory: WriterDirectory,
+        directory: SearchIndexEntity,
         fields: Vec<(SearchFieldName, SearchFieldConfig, SearchFieldType)>,
         key_field_index: usize,
-    ) -> Result<Self, SearchIndexError> {
-        SearchIndexWriter::create_index(directory.clone(), fields, key_field_index)?;
-
-        // As the new index instance was created in a background process, we need
-        // to load it from disk to use it.
-        let new_self_ref = Self::from_disk(&directory)
-            .unwrap_or_else(|err| panic!("error loading index from directory: {err}"));
-
-        Ok(new_self_ref)
+    ) -> Result<Self> {
+        SearchIndexWriter::create_index(directory.clone(), fields, key_field_index)
     }
 
     pub fn get_reader(&self) -> Result<SearchIndexReader> {
@@ -99,7 +92,10 @@ impl SearchIndex {
     /// can get an exclusive lock on the Tantivy writer. The return type needs to
     /// be entirely owned by the new process, with no references.
     pub fn get_writer(&self, resources: WriterResources) -> Result<SearchIndexWriter> {
-        SearchIndexWriter::new(self.underlying_index.clone(), resources)
+        Ok(SearchIndexWriter::new(
+            self.underlying_index.clone(),
+            resources,
+        )?)
     }
 
     #[allow(static_mut_refs)]
@@ -133,18 +129,6 @@ impl SearchIndex {
 
     pub fn key_field_name(&self) -> String {
         self.key_field().name.to_string()
-    }
-
-    pub fn from_disk(directory: &WriterDirectory) -> Result<Self, SearchIndexError> {
-        let mut new_self: Self = directory.load_index()?;
-
-        // In the case of a physical replication of the database, the absolute path that is stored
-        // in the serialized WriterDirectory might refer to the source database's file system.
-        // We should overwrite it with the dynamically generated one that's been passed as an
-        // argument here.
-        new_self.directory = directory.clone();
-
-        Ok(new_self)
     }
 
     pub fn query_parser(&self) -> QueryParser {
@@ -194,7 +178,7 @@ impl<'de> Deserialize<'de> for SearchIndex {
         #[derive(Deserialize)]
         struct SearchIndexHelper {
             schema: SearchIndexSchema,
-            directory: WriterDirectory,
+            directory: SearchIndexEntity,
         }
 
         // Deserialize into the struct with automatic handling for most fields
@@ -230,9 +214,6 @@ pub enum SearchIndexError {
 
     #[error(transparent)]
     SerdeError(#[from] serde_json::Error),
-
-    #[error(transparent)]
-    WriterDirectoryError(#[from] SearchDirectoryError),
 
     #[error(transparent)]
     AnyhowError(#[from] anyhow::Error),
