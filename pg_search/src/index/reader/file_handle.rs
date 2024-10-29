@@ -37,7 +37,7 @@ impl FileHandle for FileHandleReader {
             let end = range.end;
             let start_block = start / MAX_HEAP_TUPLE_SIZE;
             let end_block = end / MAX_HEAP_TUPLE_SIZE;
-            let blocks = self.handle.internal().blocks();
+            let blocks = self.handle.blocks.clone();
             let mut data: Vec<u8> = vec![];
 
             for i in start_block..=end_block {
@@ -70,6 +70,6 @@ impl FileHandle for FileHandleReader {
 
 impl HasLen for FileHandleReader {
     fn len(&self) -> usize {
-        self.handle.internal().total_bytes()
+        self.handle.total_bytes
     }
 }

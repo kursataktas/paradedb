@@ -94,7 +94,7 @@ impl BlockingDirectory {
             let segment_handle = SegmentHandle::open(self.relation_oid, path).unwrap();
             if let Some(segment_handle) = segment_handle {
                 let cache = BufferCache::open(self.relation_oid);
-                let blocknos = segment_handle.internal().blocks();
+                let blocknos = segment_handle.blocks;
                 for blockno in blocknos {
                     let buffer = cache.get_buffer(blockno, Some(pg_sys::BUFFER_LOCK_EXCLUSIVE));
                     let page = pg_sys::BufferGetPage(buffer);

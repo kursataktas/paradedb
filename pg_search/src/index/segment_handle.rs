@@ -16,42 +16,11 @@ pub(crate) struct SegmentHandleSpecialData {
     pub managed_blockno: pg_sys::BlockNumber,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct SegmentHandle {
-    // Tracks the handle is physically stored
-    blockno: pg_sys::BlockNumber,
-    offsetno: pg_sys::OffsetNumber,
-    relation_oid: u32,
-    internal: SegmentHandleInternal,
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct SegmentHandleInternal {
-    path: PathBuf,
-    blocks: Vec<pg_sys::BlockNumber>,
-    total_bytes: usize,
-}
-
-impl SegmentHandleInternal {
-    pub fn new(path: PathBuf, blocks: Vec<pg_sys::BlockNumber>, total_bytes: usize) -> Self {
-        Self {
-            path,
-            blocks,
-            total_bytes,
-        }
-    }
-
-    pub fn path(&self) -> PathBuf {
-        self.path.clone()
-    }
-
-    pub fn blocks(&self) -> Vec<pg_sys::BlockNumber> {
-        self.blocks.clone()
-    }
-
-    pub fn total_bytes(&self) -> usize {
-        self.total_bytes
-    }
+pub(crate) struct SegmentHandle {
+    pub path: PathBuf,
+    pub blocks: Vec<pg_sys::BlockNumber>,
+    pub total_bytes: usize,
 }
 
 impl SegmentHandle {
@@ -67,23 +36,13 @@ impl SegmentHandle {
         while offsetno <= pg_sys::PageGetMaxOffsetNumber(page) {
             let item_id = pg_sys::PageGetItemId(page, offsetno);
             let item = pg_sys::PageGetItem(page, item_id);
-            let segment: SegmentHandleInternal = from_slice(from_raw_parts(
+            let segment: SegmentHandle = from_slice(from_raw_parts(
                 item as *const u8,
                 (*item_id).lp_len() as usize,
             ))?;
             if segment.path == path {
-                let internal = SegmentHandleInternal::new(
-                    segment.path.clone(),
-                    segment.blocks,
-                    segment.total_bytes,
-                );
                 pg_sys::UnlockReleaseBuffer(buffer);
-                return Ok(Some(Self {
-                    blockno,
-                    offsetno,
-                    relation_oid,
-                    internal,
-                }));
+                return Ok(Some(segment));
             }
             offsetno += 1;
         }
@@ -92,21 +51,31 @@ impl SegmentHandle {
         Ok(None)
     }
 
-    pub unsafe fn create(relation_oid: u32, internal: SegmentHandleInternal) -> Self {
+    pub unsafe fn create(
+        relation_oid: u32,
+        path: &Path,
+        blocks: Vec<pg_sys::BlockNumber>,
+        total_bytes: usize,
+    ) {
         let cache = BufferCache::open(relation_oid);
         let mut buffer = cache.get_buffer(SEARCH_META_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
         let mut page = pg_sys::BufferGetPage(buffer);
         let special = pg_sys::PageGetSpecialPointer(page) as *mut SegmentHandleSpecialData;
 
-        if pg_sys::PageGetFreeSpace(page) < size_of::<SegmentHandleInternal>() {
-            let new_buffer = cache.new_buffer(size_of::<SegmentHandleInternal>());
+        if pg_sys::PageGetFreeSpace(page) < size_of::<SegmentHandle>() {
+            let new_buffer = cache.new_buffer(size_of::<SegmentHandle>());
             (*special).next_blockno = pg_sys::BufferGetBlockNumber(new_buffer);
             pg_sys::MarkBufferDirty(buffer);
             buffer = new_buffer;
             page = pg_sys::BufferGetPage(buffer);
         }
 
-        let serialized: Vec<u8> = serde_json::to_vec(&internal).unwrap();
+        let segment = SegmentHandle {
+            path: path.to_path_buf(),
+            blocks,
+            total_bytes,
+        };
+        let serialized: Vec<u8> = serde_json::to_vec(&segment).unwrap();
         let offsetno = pg_sys::PageAddItemExtended(
             page,
             serialized.as_ptr() as pg_sys::Item,
@@ -117,16 +86,5 @@ impl SegmentHandle {
 
         pg_sys::MarkBufferDirty(buffer);
         pg_sys::UnlockReleaseBuffer(buffer);
-
-        Self {
-            blockno: pg_sys::BufferGetBlockNumber(buffer),
-            offsetno,
-            relation_oid,
-            internal,
-        }
-    }
-
-    pub fn internal(&self) -> &SegmentHandleInternal {
-        &self.internal
     }
 }
