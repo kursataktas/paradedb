@@ -15,9 +15,13 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::directory::writer::WriterDirectory;
+use crate::index::directory::blocking::BlockingDirectory;
+use crate::index::directory::writer::SearchIndexEntity;
 use crate::index::{SearchIndex, SearchIndexError};
+use crate::postgres::build::get_fields;
+use crate::schema::SearchIndexSchema;
 use pgrx::{pg_sys, PgRelation};
+use tantivy::Index;
 
 /// Open the underlying [`SearchIndex`] for the specified Postgres index relation
 pub fn open_search_index(
@@ -26,12 +30,21 @@ pub fn open_search_index(
     let database_oid = unsafe { pg_sys::MyDatabaseId };
     let index_oid = index_relation.oid();
     let relfilenode = relfilenode_from_pg_relation(index_relation);
-    let directory = WriterDirectory::from_oids(
+    let directory = SearchIndexEntity::from_oids(
         database_oid.as_u32(),
         index_oid.as_u32(),
         relfilenode.as_u32(),
     );
-    SearchIndex::from_disk(&directory)
+    let (fields, key_field_index) = unsafe { get_fields(index_relation) };
+    let schema = SearchIndexSchema::new(fields, key_field_index)?;
+    let tantivy_dir = BlockingDirectory::new(directory.index_oid);
+    let underlying_index = Index::open(tantivy_dir)?;
+
+    Ok(SearchIndex {
+        schema,
+        underlying_index,
+        directory,
+    })
 }
 
 /// Retrieves the `relfilenode` from a `PgRelation`, handling PostgreSQL version differences.

@@ -10,7 +10,9 @@ use std::{
     result,
 };
 use tantivy::directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError};
-use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr, TerminatingWrite};
+use tantivy::directory::{
+    DirectoryLock, FileHandle, Lock, TerminatingWrite, WatchCallback, WatchHandle, WritePtr,
+};
 use tantivy::Directory;
 
 use crate::index::directory::blocking::{BlockingDirectory, BlockingLock};

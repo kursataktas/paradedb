@@ -33,16 +33,16 @@ use tantivy::{Directory, Index};
 use thiserror::Error;
 
 use crate::index::directory::blocking::{BlockingDirectory, META_FILEPATH};
-use crate::index::directory::writer::{SearchDirectoryError, SearchFs, WriterDirectory};
+use crate::index::directory::writer::SearchIndexEntity;
 use crate::index::WriterResources;
 
 /// A global store of which indexes have been created during a transaction,
 /// so that they can be committed or rolled back in case of an abort.
-static mut PENDING_INDEX_CREATES: Lazy<HashSet<WriterDirectory>> = Lazy::new(HashSet::new);
+static mut PENDING_INDEX_CREATES: Lazy<HashSet<SearchIndexEntity>> = Lazy::new(HashSet::new);
 
 /// A global store of which indexes have been dropped during a transaction,
 /// so that they can be committed or rolled back in case of an abort.
-static mut PENDING_INDEX_DROPS: Lazy<HashSet<WriterDirectory>> = Lazy::new(HashSet::new);
+static mut PENDING_INDEX_DROPS: Lazy<HashSet<SearchIndexEntity>> = Lazy::new(HashSet::new);
 
 /// The entity that interfaces with Tantivy indexes.
 pub struct SearchIndexWriter {
@@ -109,10 +109,10 @@ impl SearchIndexWriter {
     }
 
     pub fn create_index(
-        directory: WriterDirectory,
+        directory: SearchIndexEntity,
         fields: Vec<(SearchFieldName, SearchFieldConfig, SearchFieldType)>,
         key_field_index: usize,
-    ) -> Result<()> {
+    ) -> Result<SearchIndex> {
         let schema = SearchIndexSchema::new(fields, key_field_index)?;
         let tantivy_dir = BlockingDirectory::new(directory.index_oid);
         let settings = IndexSettings {
@@ -123,27 +123,22 @@ impl SearchIndexWriter {
 
         SearchIndex::setup_tokenizers(&mut underlying_index, &schema);
 
-        let new_self = SearchIndex {
-            underlying_index,
-            directory: directory.clone(),
-            schema,
-        };
-
-        // Serialize SearchIndex to disk so it can be initialized by other connections.
-        new_self.directory.save_index(&new_self)?;
-
         // Mark in our global store that this index is pending create, in case it
         // needs to be rolled back on abort.
         Self::mark_pending_create(&directory);
 
-        Ok(())
+        Ok(SearchIndex {
+            underlying_index,
+            directory,
+            schema,
+        })
     }
 
-    pub fn mark_pending_create(directory: &WriterDirectory) -> bool {
+    pub fn mark_pending_create(directory: &SearchIndexEntity) -> bool {
         unsafe { PENDING_INDEX_CREATES.insert(directory.clone()) }
     }
 
-    pub fn mark_pending_drop(directory: &WriterDirectory) -> bool {
+    pub fn mark_pending_drop(directory: &SearchIndexEntity) -> bool {
         unsafe { PENDING_INDEX_DROPS.insert(directory.clone()) }
     }
 
@@ -155,11 +150,11 @@ impl SearchIndexWriter {
         unsafe { PENDING_INDEX_DROPS.clear() }
     }
 
-    pub fn pending_creates() -> impl Iterator<Item = &'static WriterDirectory> {
+    pub fn pending_creates() -> impl Iterator<Item = &'static SearchIndexEntity> {
         unsafe { PENDING_INDEX_CREATES.iter() }
     }
 
-    pub fn pending_drops() -> impl Iterator<Item = &'static WriterDirectory> {
+    pub fn pending_drops() -> impl Iterator<Item = &'static SearchIndexEntity> {
         unsafe { PENDING_INDEX_DROPS.iter() }
     }
 }
@@ -177,9 +172,6 @@ pub enum IndexError {
 
     #[error(transparent)]
     TantivyValueError(#[from] TantivyValueError),
-
-    #[error("couldn't remove index files on drop_index: {0}")]
-    DeleteDirectory(#[from] SearchDirectoryError),
 
     #[error("key_field column '{0}' cannot be NULL")]
     KeyIdNull(String),

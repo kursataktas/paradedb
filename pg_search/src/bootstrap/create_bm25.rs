@@ -21,7 +21,6 @@ use pgrx::{JsonB, PgRelation, Spi};
 use serde_json::Value;
 use std::collections::HashSet;
 
-use crate::index::directory::writer::SearchFs;
 use crate::postgres::index::open_search_index;
 
 #[pg_extern(
@@ -239,23 +238,8 @@ fn index_info(
         .into_iter()
         .map(|meta| {
             let segno = meta.id().short_uuid_string();
-            let byte_size = meta
-                .list_files()
-                .into_iter()
-                .map(|file| {
-                    let mut full_path = directory.tantivy_dir_path(false).unwrap().0;
-                    full_path.push(file);
-
-                    if full_path.exists() {
-                        full_path
-                            .metadata()
-                            .map(|metadata| metadata.len())
-                            .unwrap_or(0)
-                    } else {
-                        0
-                    }
-                })
-                .sum::<u64>() as i64;
+            // TODO
+            let byte_size = 0;
             let num_docs = meta.num_docs() as i64;
             let num_deleted = meta.num_deleted_docs() as i64;
 
