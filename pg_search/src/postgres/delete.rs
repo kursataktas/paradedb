@@ -40,6 +40,7 @@ pub extern "C" fn ambulkdelete(
     let (response_sender, response_receiver) = crossbeam::channel::unbounded::<ChannelResponse>();
 
     std::thread::spawn(move || {
+        eprintln!("Spawning thread");
         let channel_directory =
             ChannelDirectory::new(request_sender.clone(), response_receiver.clone());
         let channel_index = Index::open(channel_directory).expect("channel index should open");
@@ -58,6 +59,7 @@ pub extern "C" fn ambulkdelete(
             let ctid_ff = FFType::new(fast_fields, "ctid");
             if let FFType::U64(ff) = ctid_ff {
                 let ctids: Vec<u64> = ff.iter().collect();
+                eprintln!("ctids: {:?}", ctids);
                 request_sender
                     .send(ChannelRequest::ShouldDeleteCtids(ctids))
                     .unwrap();
@@ -65,6 +67,7 @@ pub extern "C" fn ambulkdelete(
                     ChannelResponse::ShouldDeleteCtids(ctids) => ctids,
                     _ => panic!("unexpected response in bulkdelete thread"),
                 };
+                eprintln!("ctids to delete: {:?}", ctids_to_delete);
                 for ctid in ctids_to_delete {
                     let ctid_field = channel_index.schema().get_field("ctid").unwrap();
                     let ctid_term = tantivy::Term::from_field_u64(ctid_field, ctid);
@@ -72,8 +75,9 @@ pub extern "C" fn ambulkdelete(
                 }
             }
         }
-        writer.commit().unwrap();
+        writer.prepare_commit().unwrap().commit().unwrap();
         writer.wait_merging_threads().unwrap();
+        eprintln!("Thread done");
         request_sender.send(ChannelRequest::Terminate).unwrap();
     });
 
