@@ -25,7 +25,7 @@ pub enum ChannelRequest {
     AcquireLock(Lock),
     AtomicRead(PathBuf),
     AtomicWrite(PathBuf, Vec<u8>),
-    ReleaseLock(BlockingLock),
+    ReleaseBlockingLock(BlockingLock),
     SegmentRead(PathBuf, Range<usize>, SegmentHandle),
     SegmentWrite(PathBuf, Cursor<Vec<u8>>),
     SegmentDelete(PathBuf),
@@ -67,7 +67,7 @@ pub struct ChannelLock {
 impl Drop for ChannelLock {
     fn drop(&mut self) {
         if let Some(lock) = self.lock.take() {
-            self.sender.send(ChannelRequest::ReleaseLock(lock)).unwrap();
+            self.sender.send(ChannelRequest::ReleaseBlockingLock(lock)).unwrap();
         }
     }
 }
@@ -264,7 +264,6 @@ impl ChannelRequestHandler {
             match message {
                 ChannelRequest::AcquireLock(lock) => {
                     let blocking_lock = unsafe { self.directory.acquire_blocking_lock(&lock)? };
-                    pgrx::info!("got lock {:?}", lock);
                     self.sender
                         .send(ChannelResponse::AcquiredLock(blocking_lock))?;
                 }
@@ -280,7 +279,7 @@ impl ChannelRequestHandler {
                     let handle = unsafe { SegmentHandle::open(self.relation_oid, &path)? };
                     self.sender.send(ChannelResponse::SegmentHandle(handle))?;
                 }
-                ChannelRequest::ReleaseLock(blocking_lock) => {
+                ChannelRequest::ReleaseBlockingLock(blocking_lock) => {
                     drop(blocking_lock);
                 }
                 ChannelRequest::SegmentRead(path, range, handle) => {
