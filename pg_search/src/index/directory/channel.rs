@@ -103,7 +103,6 @@ impl Directory for ChannelDirectory {
     }
 
     fn open_write(&self, path: &Path) -> result::Result<WritePtr, OpenWriteError> {
-        eprintln!("channel open write {:?}", path);
         Ok(io::BufWriter::new(Box::new(unsafe {
             ChannelWriter::new(path, self.sender.clone(), self.receiver.clone())
         })))
@@ -188,10 +187,6 @@ impl Directory for ChannelDirectory {
                 .into(),
             )),
         }
-        // Ok(DirectoryLock::from(Box::new(Lock {
-        //     filepath: lock.filepath.clone(),
-        //     is_blocking: true,
-        // })))
     }
 
     // Internally, tantivy only uses this API to detect new commits to implement the

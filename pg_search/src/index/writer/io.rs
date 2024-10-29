@@ -12,19 +12,18 @@ pub struct IoWriter {
     relation_oid: u32,
     path: PathBuf,
     data: Cursor<Vec<u8>>,
+    blocks: Vec<pg_sys::BlockNumber>,
+    total_bytes: usize,
 }
 
 impl IoWriter {
     pub unsafe fn new(relation_oid: u32, path: &Path) -> Self {
-        assert!(
-            !path.to_str().unwrap().ends_with(".lock"),
-            ".lock files should not be written"
-        );
-
         Self {
             relation_oid,
             path: path.to_path_buf(),
             data: Cursor::new(Vec::new()),
+            blocks: vec![],
+            total_bytes: 0,
         }
     }
 }
@@ -40,6 +39,48 @@ impl Write for IoWriter {
     }
 
     fn flush(&mut self) -> Result<()> {
+        unsafe {
+            const MAX_HEAP_TUPLE_SIZE: usize = unsafe { max_heap_tuple_size() };
+            let cache = BufferCache::open(self.relation_oid);
+
+            if self.data.get_ref().len() >= MAX_HEAP_TUPLE_SIZE {
+                let mut sink = [0; MAX_HEAP_TUPLE_SIZE];
+                self.data.seek(std::io::SeekFrom::Start(0))?;
+                while let Ok(bytes_read) = self.data.read(&mut sink) {
+                    if bytes_read == 0 {
+                        break;
+                    }
+
+                    assert!(
+                        bytes_read == MAX_HEAP_TUPLE_SIZE,
+                        "expected to read full page, got {} bytes",
+                        bytes_read
+                    );
+
+                    self.total_bytes += bytes_read;
+                    let buffer = cache.new_buffer(0);
+                    let page = pg_sys::BufferGetPage(buffer);
+                    let data_slice = &sink[0..bytes_read];
+
+                    pg_sys::PageAddItemExtended(
+                        page,
+                        data_slice.as_ptr() as pg_sys::Item,
+                        data_slice.len(),
+                        pg_sys::InvalidOffsetNumber,
+                        0,
+                    );
+
+                    self.blocks.push(pg_sys::BufferGetBlockNumber(buffer));
+                    pg_sys::MarkBufferDirty(buffer);
+                    pg_sys::UnlockReleaseBuffer(buffer);
+
+                    if self.data.get_ref().len() < MAX_HEAP_TUPLE_SIZE {
+                        break;
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 }
@@ -49,17 +90,15 @@ impl TerminatingWrite for IoWriter {
         unsafe {
             const MAX_HEAP_TUPLE_SIZE: usize = unsafe { max_heap_tuple_size() };
             let mut sink = [0; MAX_HEAP_TUPLE_SIZE];
-
             let cache = BufferCache::open(self.relation_oid);
-            let total_bytes = self.data.get_ref().len();
             self.data.seek(std::io::SeekFrom::Start(0))?;
-            let mut blocks: Vec<pg_sys::BlockNumber> = vec![];
 
             while let Ok(bytes_read) = self.data.read(&mut sink) {
                 if bytes_read == 0 {
                     break;
                 }
 
+                self.total_bytes += bytes_read;
                 let buffer = cache.new_buffer(0);
                 let page = pg_sys::BufferGetPage(buffer);
                 let data_slice = &sink[0..bytes_read];
@@ -72,13 +111,17 @@ impl TerminatingWrite for IoWriter {
                     0,
                 );
 
-                blocks.push(pg_sys::BufferGetBlockNumber(buffer));
+                self.blocks.push(pg_sys::BufferGetBlockNumber(buffer));
                 pg_sys::MarkBufferDirty(buffer);
                 pg_sys::UnlockReleaseBuffer(buffer);
             }
 
-            eprintln!("creating segment handle for {:?}", self.path);
-            SegmentHandle::create(self.relation_oid, &self.path, blocks, total_bytes);
+            SegmentHandle::create(
+                self.relation_oid,
+                &self.path,
+                self.blocks.clone(),
+                self.total_bytes,
+            );
             Ok(())
         }
     }
