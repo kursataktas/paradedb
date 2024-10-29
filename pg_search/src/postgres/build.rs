@@ -17,12 +17,12 @@
 
 use crate::index::directory::atomic::AtomicSpecialData;
 use crate::index::directory::writer::WriterDirectory;
+use crate::index::segment_handle::SegmentHandleSpecialData;
 use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::buffer::{BufferCache, SEARCH_META_BLOCKNO};
 use crate::postgres::index::relfilenode_from_pg_relation;
 use crate::postgres::insert::init_insert_state;
 use crate::postgres::options::SearchIndexCreateOptions;
-use crate::index::segment_handle::SegmentHandleSpecialData;
 use crate::postgres::utils::row_to_search_document;
 use crate::schema::{IndexRecordOption, SearchFieldConfig, SearchFieldName, SearchFieldType};
 use pgrx::*;
@@ -374,6 +374,7 @@ unsafe fn create_metadata(relation_oid: u32) {
     let page = pg_sys::BufferGetPage(buffer);
     let special = pg_sys::PageGetSpecialPointer(page) as *mut SegmentHandleSpecialData;
 
+    let lock_buffer = cache.new_buffer(0);
     let meta_buffer = cache.new_buffer(std::mem::size_of::<AtomicSpecialData>());
     let managed_buffer = cache.new_buffer(std::mem::size_of::<AtomicSpecialData>());
 
@@ -382,9 +383,11 @@ unsafe fn create_metadata(relation_oid: u32) {
     (*special).next_blockno = pg_sys::InvalidBlockNumber;
 
     pg_sys::MarkBufferDirty(buffer);
+    pg_sys::MarkBufferDirty(lock_buffer);
     pg_sys::MarkBufferDirty(meta_buffer);
     pg_sys::MarkBufferDirty(managed_buffer);
     pg_sys::UnlockReleaseBuffer(buffer);
+    pg_sys::UnlockReleaseBuffer(lock_buffer);
     pg_sys::UnlockReleaseBuffer(meta_buffer);
     pg_sys::UnlockReleaseBuffer(managed_buffer);
 }

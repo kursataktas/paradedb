@@ -60,7 +60,6 @@ impl SegmentHandle {
         let buffer = cache.get_buffer(SEARCH_META_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
         let blockno = pg_sys::BufferGetBlockNumber(buffer);
         let page = pg_sys::BufferGetPage(buffer);
-        let special = pg_sys::PageGetSpecialPointer(page) as *mut SegmentHandleSpecialData;
 
         let mut offsetno = pg_sys::FirstOffsetNumber;
         // TODO: Implement a way to read the next block if the current block is full
