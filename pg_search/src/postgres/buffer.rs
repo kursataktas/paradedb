@@ -1,9 +1,12 @@
 use pgrx::*;
 use std::ptr::null_mut;
 
-// The first block of the index is the metadata block, which is essentially a map for how the rest of the blocks are organized.
-// It is our responsibility to ensure that the metadata block is the first block by creating it immediately when the index is built.
+/// The first block of the index is the metadata block, which is essentially a map for how the rest of the blocks are organized.
+/// It is our responsibility to ensure that the metadata block is the first block by creating it immediately when the index is built.
 pub const SEARCH_META_BLOCKNO: pg_sys::BlockNumber = 0;
+/// The second block is used for Tantivy's INDEX_WRITER_LOCK
+/// It is our responsibility that this is the second block
+pub const INDEX_WRITER_LOCK_BLOCKNO: pg_sys::BlockNumber = 1;
 
 // Reads and writes buffers from the buffer cache for a pg_sys::Relation
 #[derive(Clone, Debug)]
@@ -55,7 +58,6 @@ impl BufferCache {
     }
 
     pub unsafe fn record_free_index_page(&self, blockno: pg_sys::BlockNumber) {
-        pgrx::info!("recording free buffer: {}", blockno);
         pg_sys::RecordFreeIndexPage(self.boxed.as_ptr(), blockno);
     }
 }

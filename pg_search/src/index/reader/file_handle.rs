@@ -7,8 +7,8 @@ use tantivy::directory::FileHandle;
 use tantivy::directory::OwnedBytes;
 use tantivy::HasLen;
 
-use crate::postgres::buffer::BufferCache;
 use crate::index::segment_handle::SegmentHandle;
+use crate::postgres::buffer::BufferCache;
 use crate::postgres::utils::max_heap_tuple_size;
 
 #[derive(Clone, Debug)]
@@ -45,7 +45,6 @@ impl FileHandle for FileHandleReader {
                 let page = pg_sys::BufferGetPage(buffer);
                 let item_id = pg_sys::PageGetItemId(page, pg_sys::FirstOffsetNumber);
                 let item = pg_sys::PageGetItem(page, item_id);
-                let len = (*item_id).lp_len() as usize;
 
                 let slice_start = if i == start_block {
                     start % MAX_HEAP_TUPLE_SIZE
@@ -58,7 +57,6 @@ impl FileHandle for FileHandleReader {
                     MAX_HEAP_TUPLE_SIZE
                 };
                 let slice_len = slice_end - slice_start;
-                let vec: Vec<u8> = Vec::with_capacity(slice_len);
                 let slice = from_raw_parts(item.add(slice_start) as *const u8, slice_len);
                 data.extend_from_slice(slice);
 

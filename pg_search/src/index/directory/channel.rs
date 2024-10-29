@@ -1,5 +1,6 @@
 use anyhow::Result;
 use crossbeam::channel::{Receiver, Sender};
+use std::fmt::{Debug, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{
@@ -12,17 +13,19 @@ use tantivy::directory::error::{DeleteError, LockError, OpenReadError, OpenWrite
 use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr};
 use tantivy::Directory;
 
-use crate::index::directory::blocking::BlockingDirectory;
+use crate::index::directory::blocking::{BlockingDirectory, BlockingLock};
 use crate::index::reader::channel::ChannelReader;
 use crate::index::reader::file_handle::FileHandleReader;
+use crate::index::segment_handle::SegmentHandle;
 use crate::index::writer::channel::ChannelWriter;
 use crate::index::writer::io::IoWriter;
-use crate::index::segment_handle::SegmentHandle;
 
 #[derive(Debug)]
 pub enum ChannelRequest {
+    AcquireLock(Lock),
     AtomicRead(PathBuf),
     AtomicWrite(PathBuf, Vec<u8>),
+    ReleaseLock(BlockingLock),
     SegmentRead(PathBuf, Range<usize>, SegmentHandle),
     SegmentWrite(PathBuf, Cursor<Vec<u8>>),
     SegmentDelete(PathBuf),
@@ -31,14 +34,42 @@ pub enum ChannelRequest {
     Terminate,
 }
 
-#[derive(Debug)]
 pub enum ChannelResponse {
+    AtomicWriteAck,
+    SegmentWriteAck,
+    SegmentDeleteAck,
+    AcquiredLock(BlockingLock),
     Bytes(Vec<u8>),
     SegmentHandle(Option<SegmentHandle>),
-    SegmentWriteAck,
-    AtomicWriteAck,
-    SegmentDeleteAck,
     ShouldDeleteCtids(Vec<u64>),
+}
+
+impl Debug for ChannelResponse {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ChannelResponse::AcquiredLock(_) => write!(f, "AcquiredLock"),
+            ChannelResponse::AtomicWriteAck => write!(f, "AtomicWriteAck"),
+            ChannelResponse::SegmentWriteAck => write!(f, "SegmentWriteAck"),
+            ChannelResponse::SegmentDeleteAck => write!(f, "AcquiredSegmentDeleteAckLock"),
+            ChannelResponse::Bytes(_) => write!(f, "Bytes"),
+            ChannelResponse::SegmentHandle(_) => write!(f, "SegmentHandle"),
+            ChannelResponse::ShouldDeleteCtids(_) => write!(f, "ShouldDeleteCtids"),
+        }
+    }
+}
+
+pub struct ChannelLock {
+    // This is an Option because we need to take ownership of the lock in the Drop implementation
+    lock: Option<BlockingLock>,
+    sender: Sender<ChannelRequest>,
+}
+
+impl Drop for ChannelLock {
+    fn drop(&mut self) {
+        if let Some(lock) = self.lock.take() {
+            self.sender.send(ChannelRequest::ReleaseLock(lock)).unwrap();
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -157,17 +188,38 @@ impl Directory for ChannelDirectory {
     }
 
     fn acquire_lock(&self, lock: &Lock) -> result::Result<DirectoryLock, LockError> {
-        /// TODO: Acquire lock
-        Ok(DirectoryLock::from(Box::new(Lock {
-            filepath: lock.filepath.clone(),
-            is_blocking: true,
-        })))
+        self.request_sender
+            .send(ChannelRequest::AcquireLock(Lock {
+                filepath: lock.filepath.clone(),
+                is_blocking: lock.is_blocking,
+            }))
+            .unwrap();
+
+        match self.response_receiver.recv().unwrap() {
+            ChannelResponse::AcquiredLock(blocking_lock) => {
+                Ok(DirectoryLock::from(Box::new(ChannelLock {
+                    lock: Some(blocking_lock),
+                    sender: self.request_sender.clone(),
+                })))
+            }
+            unexpected => Err(LockError::IoError(
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("acquire_lock unexpected response {:?}", unexpected),
+                )
+                .into(),
+            )),
+        }
+        // Ok(DirectoryLock::from(Box::new(Lock {
+        //     filepath: lock.filepath.clone(),
+        //     is_blocking: true,
+        // })))
     }
 
     // Internally, tantivy only uses this API to detect new commits to implement the
     // `OnCommitWithDelay` `ReloadPolicy`. Not implementing watch in a `Directory` only prevents
     // the `OnCommitWithDelay` `ReloadPolicy` to work properly.
-    fn watch(&self, watch_callback: WatchCallback) -> tantivy::Result<WatchHandle> {
+    fn watch(&self, _watch_callback: WatchCallback) -> tantivy::Result<WatchHandle> {
         unimplemented!("OnCommitWithDelay ReloadPolicy not supported");
     }
 
@@ -210,9 +262,15 @@ impl ChannelRequestHandler {
         let mut pages_deleted = 0;
         for message in self.receiver.iter() {
             match message {
+                ChannelRequest::AcquireLock(lock) => {
+                    let blocking_lock = unsafe { self.directory.acquire_blocking_lock(&lock)? };
+                    pgrx::info!("got lock {:?}", lock);
+                    self.sender
+                        .send(ChannelResponse::AcquiredLock(blocking_lock))?;
+                }
                 ChannelRequest::AtomicRead(path) => {
                     let data = self.directory.atomic_read(&path)?;
-                    self.sender.send(ChannelResponse::Bytes(data))?
+                    self.sender.send(ChannelResponse::Bytes(data))?;
                 }
                 ChannelRequest::AtomicWrite(path, data) => {
                     self.directory.atomic_write(&path, &data)?;
@@ -221,6 +279,9 @@ impl ChannelRequestHandler {
                 ChannelRequest::GetSegmentHandle(path) => {
                     let handle = unsafe { SegmentHandle::open(self.relation_oid, &path)? };
                     self.sender.send(ChannelResponse::SegmentHandle(handle))?;
+                }
+                ChannelRequest::ReleaseLock(blocking_lock) => {
+                    drop(blocking_lock);
                 }
                 ChannelRequest::SegmentRead(path, range, handle) => {
                     let reader = FileHandleReader::new(self.relation_oid, &path, handle);
@@ -251,7 +312,6 @@ impl ChannelRequestHandler {
                     }
                 }
                 ChannelRequest::Terminate => break,
-                message => panic!("unexpected message in bulkdelete thread: {:?}", message),
             }
         }
 

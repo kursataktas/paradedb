@@ -52,7 +52,6 @@ impl AtomicDirectory {
     unsafe fn read_bytes(&self, blockno: pg_sys::BlockNumber) -> Vec<u8> {
         let buffer = self.cache.get_buffer(blockno, None);
         let page = pg_sys::BufferGetPage(buffer);
-        let special = pg_sys::PageGetSpecialPointer(page) as *mut AtomicSpecialData;
         let item_id = pg_sys::PageGetItemId(page, pg_sys::FirstOffsetNumber);
         let item = pg_sys::PageGetItem(page, item_id);
         let len = (*item_id).lp_len() as usize;

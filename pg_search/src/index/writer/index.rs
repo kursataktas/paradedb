@@ -24,7 +24,6 @@ use crate::{
 };
 use anyhow::Result;
 use once_cell::sync::Lazy;
-use std::io::Write;
 use std::collections::HashSet;
 use tantivy::{
     indexer::{AddOperation, SegmentWriter},

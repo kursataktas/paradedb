@@ -15,25 +15,25 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use once_cell::sync::Lazy;
 use pgrx::pg_sys;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::path::Path;
 use std::{io, result};
 use tantivy::directory::{DirectoryLock, FileHandle, Lock, WatchCallback, WatchHandle, WritePtr};
+use tantivy::Directory;
 use tantivy::{
     directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError},
-    directory::{MANAGED_LOCK, META_LOCK},
+    directory::{INDEX_WRITER_LOCK, MANAGED_LOCK, META_LOCK},
 };
-use tantivy::Directory;
 
 use crate::index::atomic::AtomicDirectory;
 use crate::index::reader::file_handle::FileHandleReader;
 use crate::index::segment_handle::SegmentHandle;
 use crate::index::writer::io::IoWriter;
-use crate::postgres::buffer::BufferCache;
+use crate::postgres::buffer::{BufferCache, INDEX_WRITER_LOCK_BLOCKNO};
 
 /// Defined by Tantivy in core/mod.rs
 pub static META_FILEPATH: Lazy<&'static Path> = Lazy::new(|| Path::new("meta.json"));
@@ -47,6 +47,7 @@ pub struct BlockingDirectory {
     relation_oid: u32,
 }
 
+#[derive(Debug)]
 pub struct BlockingLock {
     buffer: pg_sys::Buffer,
 }
@@ -55,14 +56,12 @@ impl BlockingLock {
     pub unsafe fn new(relation_oid: u32, blockno: pg_sys::BlockNumber) -> Self {
         let cache = BufferCache::open(relation_oid);
         let buffer = cache.get_buffer(blockno, Some(pg_sys::BUFFER_LOCK_EXCLUSIVE));
-
         Self { buffer }
     }
 }
 
 impl Drop for BlockingLock {
     fn drop(&mut self) {
-        pgrx::info!("BlockingLock drop");
         unsafe { pg_sys::UnlockReleaseBuffer(self.buffer) };
     }
 }
@@ -70,6 +69,21 @@ impl Drop for BlockingLock {
 impl BlockingDirectory {
     pub fn new(relation_oid: u32) -> Self {
         Self { relation_oid }
+    }
+
+    pub unsafe fn acquire_blocking_lock(&self, lock: &Lock) -> Result<BlockingLock> {
+        let directory = AtomicDirectory::new(self.relation_oid);
+        let blockno = if lock.filepath == META_LOCK.filepath {
+            directory.meta_blockno
+        } else if lock.filepath == MANAGED_LOCK.filepath {
+            directory.managed_blockno
+        } else if lock.filepath == INDEX_WRITER_LOCK.filepath {
+            INDEX_WRITER_LOCK_BLOCKNO
+        } else {
+            bail!("acquire_lock unexpected lock {:?}", lock)
+        };
+
+        Ok(BlockingLock::new(self.relation_oid, blockno))
     }
 
     /// ambulkdelete wants to know how many pages were deleted, but the Directory trait doesn't let delete
@@ -88,7 +102,7 @@ impl BlockingDirectory {
                     let max_offset = pg_sys::PageGetMaxOffsetNumber(page);
                     if max_offset > pg_sys::InvalidOffsetNumber {
                         for offsetno in pg_sys::FirstOffsetNumber..=max_offset {
-                            pg_sys::PageIndexTupleDelete(page, pg_sys::FirstOffsetNumber);
+                            pg_sys::PageIndexTupleDelete(page, offsetno);
                         }
                     }
 
@@ -121,14 +135,12 @@ impl Directory for BlockingDirectory {
     }
 
     fn open_write(&self, path: &Path) -> result::Result<WritePtr, OpenWriteError> {
-        pgrx::info!("open_write: {:?}", path);
         Ok(io::BufWriter::new(Box::new(unsafe {
             IoWriter::new(self.relation_oid, path)
         })))
     }
 
     fn atomic_write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
-        pgrx::info!("atomic_write: {:?}", path);
         let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
         if path.to_path_buf() == *META_FILEPATH {
             unsafe { directory.write_meta(data) };
@@ -145,7 +157,6 @@ impl Directory for BlockingDirectory {
     }
 
     fn atomic_read(&self, path: &Path) -> result::Result<Vec<u8>, OpenReadError> {
-        pgrx::info!("atomic_read: {:?}", path);
         let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
         let data = if path.to_path_buf() == *META_FILEPATH {
             unsafe { directory.read_meta() }
@@ -173,34 +184,18 @@ impl Directory for BlockingDirectory {
 
     fn acquire_lock(&self, lock: &Lock) -> result::Result<DirectoryLock, LockError> {
         unsafe {
-            let directory = unsafe { AtomicDirectory::new(self.relation_oid) };
-            let mut blockno = None;
-
-            if lock.filepath == META_LOCK.filepath {
-                blockno = Some(directory.meta_blockno);
-            } else if lock.filepath == MANAGED_LOCK.filepath {
-                blockno = Some(directory.managed_blockno);
-            }
-
-            if let Some(blockno) = blockno {
-                pgrx::info!("acquire_lock: {:?}", lock);
-                Ok(DirectoryLock::from(Box::new(BlockingLock::new(
-                    self.relation_oid,
-                    blockno,
-                ))))
-            } else {
-                Err(LockError::wrap_io_error(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("acquire_lock unexpected lock {:?}", lock),
-                )))
-            }
+            let blocking_lock = unsafe {
+                self.acquire_blocking_lock(lock)
+                    .expect("acquire blocking lock should succeed")
+            };
+            Ok(DirectoryLock::from(Box::new(blocking_lock)))
         }
     }
 
     // Internally, tantivy only uses this API to detect new commits to implement the
     // `OnCommitWithDelay` `ReloadPolicy`. Not implementing watch in a `Directory` only prevents
     // the `OnCommitWithDelay` `ReloadPolicy` to work properly.
-    fn watch(&self, watch_callback: WatchCallback) -> tantivy::Result<WatchHandle> {
+    fn watch(&self, _watch_callback: WatchCallback) -> tantivy::Result<WatchHandle> {
         unimplemented!("OnCommitWithDelay ReloadPolicy not supported");
     }
 

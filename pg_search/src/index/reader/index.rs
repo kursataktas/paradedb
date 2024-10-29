@@ -200,46 +200,6 @@ impl SearchIndexReader {
         self.searcher.doc(doc_address)
     }
 
-    /// Scan the index and use the provided callback to search for Documents with ctid
-    /// values that need to be deleted.
-    pub fn get_ctids_to_delete(
-        &self,
-        should_delete: impl Fn(u64) -> bool,
-    ) -> Result<(Vec<u64>, u32)> {
-        let mut not_deleted: u32 = 0;
-        let mut ctids_to_delete: Vec<u64> = vec![];
-
-        let ctid_field = self.schema.ctid_field().id.0;
-        for segment_reader in self.searcher.segment_readers() {
-            let store_reader = segment_reader
-                .get_store_reader(CACHE_NUM_BLOCKS)
-                .expect("Failed to get store reader");
-
-            for doc in store_reader.iter::<TantivyDocument>(segment_reader.alive_bitset()) {
-                // if a document failed to deserialize, that's probably a hard error indicating the
-                // index is corrupt.  So return that back to the caller immediately
-                let doc = doc?;
-
-                if let Some(ctid) = doc.get_first(ctid_field).and_then(|ctid| ctid.as_u64()) {
-                    if should_delete(ctid) {
-                        ctids_to_delete.push(ctid);
-                    } else {
-                        not_deleted += 1;
-                    }
-                } else {
-                    // NB:  in a perfect world, this shouldn't happen.  But we did have a bug where
-                    // the "ctid" field was not being `STORED`, which caused this
-                    debug!(
-                        "document `{doc:?}` in segment `{}` has no ctid",
-                        segment_reader.segment_id()
-                    );
-                }
-            }
-        }
-
-        Ok((ctids_to_delete, not_deleted))
-    }
-
     /// Returns the index size, in bytes, according to tantivy
     pub fn byte_size(&self) -> Result<u64> {
         Ok(self
