@@ -25,15 +25,12 @@ use std::fmt::{Debug, Formatter};
 use tantivy::collector::{Collector, TopDocs};
 use tantivy::fastfield::Column;
 use tantivy::query::QueryParser;
-use tantivy::schema::{FieldType, Value};
+use tantivy::schema::FieldType;
 use tantivy::{
     query::Query, DocAddress, DocId, Order, Score, Searcher, SegmentOrdinal, TantivyDocument,
     TantivyError,
 };
 use tantivy::{snippet::SnippetGenerator, Executor};
-use tracing::debug;
-
-const CACHE_NUM_BLOCKS: usize = 10;
 
 /// Represents a matching document from a tantivy search.  Typically it is returned as an Iterator
 /// Item alongside the originating tantivy [`DocAddress`]
@@ -233,8 +230,8 @@ impl SearchIndexReader {
     /// handle that, if it's necessary.
     pub fn search_via_channel(
         &self,
-        need_scores: bool,
-        sort_segments_by_ctid: bool,
+        _need_scores: bool,
+        _key_field: Option<String>,
         executor: &'static Executor,
         query: &dyn Query,
     ) -> SearchResults {

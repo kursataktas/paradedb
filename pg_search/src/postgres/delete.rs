@@ -21,7 +21,6 @@ use crate::index::directory::channel::{
 };
 use crate::index::reader::index::FFType;
 use crate::index::WriterResources;
-use crate::postgres::index::open_search_index;
 use pgrx::{pg_sys::ItemPointerData, *};
 use tantivy::index::Index;
 use tantivy::indexer::IndexWriter;
@@ -37,18 +36,12 @@ pub extern "C" fn ambulkdelete(
     let mut stats = unsafe { PgBox::from_pg(stats) };
     let index_relation = unsafe { PgRelation::from_pg(info.index) };
     let index_oid: u32 = index_relation.oid().into();
-    let search_index =
-        open_search_index(&index_relation).expect("should be able to open search index");
-    let request_channel = crossbeam::channel::unbounded::<ChannelRequest>();
-    let response_channel = crossbeam::channel::unbounded::<ChannelResponse>();
-    let request_channel_clone = request_channel.clone();
-    let response_channel_clone = response_channel.clone();
+    let (request_sender, request_receiver) = crossbeam::channel::unbounded::<ChannelRequest>();
+    let (response_sender, response_receiver) = crossbeam::channel::unbounded::<ChannelResponse>();
 
     std::thread::spawn(move || {
-        let (request_sender, _) = request_channel;
-        let (_, response_receiver) = response_channel;
         let channel_directory =
-            ChannelDirectory::new(request_channel_clone, response_channel_clone, index_oid);
+            ChannelDirectory::new(request_sender.clone(), response_receiver.clone());
         let channel_index = Index::open(channel_directory).expect("channel index should open");
         let reader = channel_index
             .reader_builder()
@@ -88,8 +81,8 @@ pub extern "C" fn ambulkdelete(
     let handler = ChannelRequestHandler::open(
         blocking_directory,
         index_oid,
-        response_channel.0,
-        request_channel.1,
+        response_sender,
+        request_receiver,
     );
     let should_delete = callback.map(|actual_callback| {
         move |ctid_val: u64| unsafe {

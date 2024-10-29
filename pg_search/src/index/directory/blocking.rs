@@ -127,11 +127,7 @@ impl Directory for BlockingDirectory {
                 .unwrap()
         };
 
-        Ok(Arc::new(FileHandleReader::new(
-            self.relation_oid,
-            path,
-            handle,
-        )))
+        Ok(Arc::new(FileHandleReader::new(self.relation_oid, handle)))
     }
 
     fn open_write(&self, path: &Path) -> result::Result<WritePtr, OpenWriteError> {
@@ -178,18 +174,16 @@ impl Directory for BlockingDirectory {
         Ok(())
     }
 
-    fn exists(&self, path: &Path) -> Result<bool, OpenReadError> {
+    fn exists(&self, _path: &Path) -> Result<bool, OpenReadError> {
         todo!("directory exists");
     }
 
     fn acquire_lock(&self, lock: &Lock) -> result::Result<DirectoryLock, LockError> {
-        unsafe {
-            let blocking_lock = unsafe {
-                self.acquire_blocking_lock(lock)
-                    .expect("acquire blocking lock should succeed")
-            };
-            Ok(DirectoryLock::from(Box::new(blocking_lock)))
-        }
+        let blocking_lock = unsafe {
+            self.acquire_blocking_lock(lock)
+                .expect("acquire blocking lock should succeed")
+        };
+        Ok(DirectoryLock::from(Box::new(blocking_lock)))
     }
 
     // Internally, tantivy only uses this API to detect new commits to implement the

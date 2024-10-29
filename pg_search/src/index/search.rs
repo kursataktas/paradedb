@@ -214,17 +214,6 @@ impl SearchIndex {
 
         Ok(())
     }
-
-    pub fn drop_index(&mut self) -> Result<(), SearchIndexError> {
-        // the index is about to be queued to drop and that requires our transaction callbacks be registered
-        crate::postgres::transaction::register_callback();
-
-        // Mark in our global store that this index is pending drop so it can be physically
-        // deleted on commit, or in case it needs to be rolled back on abort.
-        SearchIndexWriter::mark_pending_drop(&self.directory);
-
-        Ok(())
-    }
 }
 
 impl<'de> Deserialize<'de> for SearchIndex {
@@ -241,11 +230,6 @@ impl<'de> Deserialize<'de> for SearchIndex {
 
         // Deserialize into the struct with automatic handling for most fields
         let SearchIndexHelper { schema, directory } = SearchIndexHelper::deserialize(deserializer)?;
-
-        let TantivyDirPath(tantivy_dir_path) = directory
-            .tantivy_dir_path(true)
-            .expect("tantivy directory path should be valid");
-
         let tantivy_dir = BlockingDirectory::new(directory.index_oid);
         let mut underlying_index = Index::open(tantivy_dir).map_err(serde::de::Error::custom)?;
         // We need to setup tokenizers again after retrieving an index from disk.

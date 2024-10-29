@@ -7,7 +7,6 @@ use crate::index::directory::channel::{ChannelRequest, ChannelResponse};
 
 #[derive(Clone, Debug)]
 pub struct ChannelWriter {
-    relation_oid: u32,
     path: PathBuf,
     data: Cursor<Vec<u8>>,
     sender: Sender<ChannelRequest>,
@@ -16,7 +15,6 @@ pub struct ChannelWriter {
 
 impl ChannelWriter {
     pub unsafe fn new(
-        relation_oid: u32,
         path: &Path,
         sender: Sender<ChannelRequest>,
         receiver: Receiver<ChannelResponse>,
@@ -27,7 +25,6 @@ impl ChannelWriter {
         );
 
         Self {
-            relation_oid,
             path: path.to_path_buf(),
             data: Cursor::new(Vec::new()),
             sender,
