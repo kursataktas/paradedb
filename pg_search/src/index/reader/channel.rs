@@ -63,6 +63,6 @@ impl FileHandle for ChannelReader {
 
 impl HasLen for ChannelReader {
     fn len(&self) -> usize {
-        self.handle.internal().total_bytes()
+        self.handle.total_bytes
     }
 }

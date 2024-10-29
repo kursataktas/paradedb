@@ -67,7 +67,9 @@ pub struct ChannelLock {
 impl Drop for ChannelLock {
     fn drop(&mut self) {
         if let Some(lock) = self.lock.take() {
-            self.sender.send(ChannelRequest::ReleaseBlockingLock(lock)).unwrap();
+            self.sender
+                .send(ChannelRequest::ReleaseBlockingLock(lock))
+                .unwrap();
         }
     }
 }

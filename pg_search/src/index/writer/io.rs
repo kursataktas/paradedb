@@ -3,7 +3,7 @@ use std::io::{Cursor, Read, Result, Seek, Write};
 use std::path::{Path, PathBuf};
 use tantivy::directory::{AntiCallToken, TerminatingWrite};
 
-use crate::index::segment_handle::{SegmentHandle, SegmentHandleInternal};
+use crate::index::segment_handle::SegmentHandle;
 use crate::postgres::buffer::BufferCache;
 use crate::postgres::utils::max_heap_tuple_size;
 
@@ -77,9 +77,7 @@ impl TerminatingWrite for IoWriter {
                 pg_sys::UnlockReleaseBuffer(buffer);
             }
 
-            let internal = SegmentHandleInternal::new(self.path.clone(), blocks, total_bytes);
-            SegmentHandle::create(self.relation_oid, internal);
-
+            SegmentHandle::create(self.relation_oid, &self.path, blocks, total_bytes);
             Ok(())
         }
     }
