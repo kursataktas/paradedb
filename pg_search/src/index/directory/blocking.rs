@@ -88,7 +88,7 @@ impl BlockingDirectory {
 
     /// ambulkdelete wants to know how many pages were deleted, but the Directory trait doesn't let delete
     /// return a value, so we provide our own
-    pub fn delete_with_stats(&self, path: &Path) -> result::Result<u32, DeleteError> {
+    pub fn delete_with_stats(&self, path: &Path) -> Result<u32> {
         unsafe {
             let mut pages_deleted = 0;
             let segment_handle = SegmentHandle::open(self.relation_oid, path).unwrap();
@@ -123,8 +123,11 @@ impl Directory for BlockingDirectory {
     fn get_file_handle(&self, path: &Path) -> Result<Arc<dyn FileHandle>, OpenReadError> {
         let handle = unsafe {
             SegmentHandle::open(self.relation_oid, path)
-                .unwrap()
-                .unwrap()
+                .map_err(|err| OpenReadError::IoError {
+                    io_error: io::Error::new(io::ErrorKind::Other, err.to_string()).into(),
+                    filepath: PathBuf::from(path),
+                })?
+                .expect("segment handle should exist")
         };
 
         Ok(Arc::new(FileHandleReader::new(self.relation_oid, handle)))
@@ -170,7 +173,12 @@ impl Directory for BlockingDirectory {
     }
 
     fn delete(&self, path: &Path) -> result::Result<(), DeleteError> {
-        let _ = self.delete_with_stats(path)?;
+        let _ = self
+            .delete_with_stats(path)
+            .map_err(|err| DeleteError::IoError {
+                io_error: io::Error::new(io::ErrorKind::Other, err.to_string()).into(),
+                filepath: PathBuf::from(path),
+            })?;
         Ok(())
     }
 
