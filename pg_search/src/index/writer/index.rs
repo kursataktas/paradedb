@@ -113,8 +113,6 @@ impl SearchIndexWriter {
         key_field_index: usize,
     ) -> Result<()> {
         let schema = SearchIndexSchema::new(fields, key_field_index)?;
-
-        let tantivy_dir_path = directory.tantivy_dir_path(true)?;
         let tantivy_dir = BlockingDirectory::new(directory.index_oid);
         let settings = IndexSettings {
             docstore_compress_dedicated_thread: false,

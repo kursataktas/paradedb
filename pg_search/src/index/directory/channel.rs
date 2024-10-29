@@ -26,7 +26,7 @@ pub enum ChannelRequest {
     AtomicRead(PathBuf),
     AtomicWrite(PathBuf, Vec<u8>),
     ReleaseBlockingLock(BlockingLock),
-    SegmentRead(PathBuf, Range<usize>, SegmentHandle),
+    SegmentRead(Range<usize>, SegmentHandle),
     SegmentWrite(PathBuf, Cursor<Vec<u8>>),
     SegmentDelete(PathBuf),
     GetSegmentHandle(PathBuf),
@@ -76,44 +76,22 @@ impl Drop for ChannelLock {
 
 #[derive(Clone, Debug)]
 pub struct ChannelDirectory {
-    request_sender: Sender<ChannelRequest>,
-    request_receiver: Receiver<ChannelRequest>,
-    response_sender: Sender<ChannelResponse>,
-    response_receiver: Receiver<ChannelResponse>,
-    relation_oid: u32,
+    sender: Sender<ChannelRequest>,
+    receiver: Receiver<ChannelResponse>,
 }
 
 // A directory that actually forwards all read/write requests to a channel
 // This channel is used to communicate with the actual storage implementation
 impl ChannelDirectory {
-    pub fn new(
-        request_channel: (Sender<ChannelRequest>, Receiver<ChannelRequest>),
-        response_channel: (Sender<ChannelResponse>, Receiver<ChannelResponse>),
-        relation_oid: u32,
-    ) -> Self {
-        let (request_sender, request_receiver) = request_channel;
-        let (response_sender, response_receiver) = response_channel;
-
-        Self {
-            request_sender,
-            response_receiver,
-            response_sender,
-            request_receiver,
-            relation_oid,
-        }
+    pub fn new(sender: Sender<ChannelRequest>, receiver: Receiver<ChannelResponse>) -> Self {
+        Self { sender, receiver }
     }
 }
 
 impl Directory for ChannelDirectory {
     fn get_file_handle(&self, path: &Path) -> Result<Arc<dyn FileHandle>, OpenReadError> {
         Ok(Arc::new(unsafe {
-            ChannelReader::new(
-                self.relation_oid,
-                path,
-                self.request_sender.clone(),
-                self.response_receiver.clone(),
-            )
-            .map_err(|e| {
+            ChannelReader::new(path, self.sender.clone(), self.receiver.clone()).map_err(|e| {
                 OpenReadError::wrap_io_error(
                     io::Error::new(io::ErrorKind::Other, format!("{:?}", e)),
                     path.to_path_buf(),
@@ -124,21 +102,16 @@ impl Directory for ChannelDirectory {
 
     fn open_write(&self, path: &Path) -> result::Result<WritePtr, OpenWriteError> {
         Ok(io::BufWriter::new(Box::new(unsafe {
-            ChannelWriter::new(
-                self.relation_oid,
-                path,
-                self.request_sender.clone(),
-                self.response_receiver.clone(),
-            )
+            ChannelWriter::new(path, self.sender.clone(), self.receiver.clone())
         })))
     }
 
     fn atomic_read(&self, path: &Path) -> result::Result<Vec<u8>, OpenReadError> {
-        self.request_sender
+        self.sender
             .send(ChannelRequest::AtomicRead(path.to_path_buf()))
             .unwrap();
 
-        match self.response_receiver.recv().unwrap() {
+        match self.receiver.recv().unwrap() {
             ChannelResponse::Bytes(bytes) => Ok(bytes),
             unexpected => Err(OpenReadError::wrap_io_error(
                 io::Error::new(
@@ -151,14 +124,14 @@ impl Directory for ChannelDirectory {
     }
 
     fn atomic_write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
-        self.request_sender
+        self.sender
             .send(ChannelRequest::AtomicWrite(
                 path.to_path_buf(),
                 data.to_vec(),
             ))
             .unwrap();
 
-        match self.response_receiver.recv().unwrap() {
+        match self.receiver.recv().unwrap() {
             ChannelResponse::AtomicWriteAck => Ok(()),
             unexpected => Err(io::Error::new(
                 io::ErrorKind::Other,
@@ -168,11 +141,11 @@ impl Directory for ChannelDirectory {
     }
 
     fn delete(&self, path: &Path) -> result::Result<(), DeleteError> {
-        self.request_sender
+        self.sender
             .send(ChannelRequest::SegmentDelete(path.to_path_buf()))
             .unwrap();
 
-        match self.response_receiver.recv().unwrap() {
+        match self.receiver.recv().unwrap() {
             ChannelResponse::SegmentDeleteAck => Ok(()),
             unexpected => Err(DeleteError::IoError {
                 io_error: io::Error::new(
@@ -185,23 +158,23 @@ impl Directory for ChannelDirectory {
         }
     }
 
-    fn exists(&self, path: &Path) -> Result<bool, OpenReadError> {
+    fn exists(&self, _path: &Path) -> Result<bool, OpenReadError> {
         todo!("directory exists");
     }
 
     fn acquire_lock(&self, lock: &Lock) -> result::Result<DirectoryLock, LockError> {
-        self.request_sender
+        self.sender
             .send(ChannelRequest::AcquireLock(Lock {
                 filepath: lock.filepath.clone(),
                 is_blocking: lock.is_blocking,
             }))
             .unwrap();
 
-        match self.response_receiver.recv().unwrap() {
+        match self.receiver.recv().unwrap() {
             ChannelResponse::AcquiredLock(blocking_lock) => {
                 Ok(DirectoryLock::from(Box::new(ChannelLock {
                     lock: Some(blocking_lock),
-                    sender: self.request_sender.clone(),
+                    sender: self.sender.clone(),
                 })))
             }
             unexpected => Err(LockError::IoError(
@@ -284,8 +257,8 @@ impl ChannelRequestHandler {
                 ChannelRequest::ReleaseBlockingLock(blocking_lock) => {
                     drop(blocking_lock);
                 }
-                ChannelRequest::SegmentRead(path, range, handle) => {
-                    let reader = FileHandleReader::new(self.relation_oid, &path, handle);
+                ChannelRequest::SegmentRead(range, handle) => {
+                    let reader = FileHandleReader::new(self.relation_oid, handle);
                     let data = reader.read_bytes(range)?;
                     self.sender
                         .send(ChannelResponse::Bytes(data.as_slice().to_owned()))?;

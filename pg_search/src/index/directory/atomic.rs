@@ -28,7 +28,7 @@ impl AtomicDirectory {
         Self {
             meta_blockno,
             managed_blockno,
-            relation_oid
+            relation_oid,
         }
     }
 

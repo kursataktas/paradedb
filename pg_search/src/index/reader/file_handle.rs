@@ -1,7 +1,6 @@
 use anyhow::Result;
 use pgrx::*;
 use std::ops::Range;
-use std::path::{Path, PathBuf};
 use std::slice::from_raw_parts;
 use tantivy::directory::FileHandle;
 use tantivy::directory::OwnedBytes;
@@ -13,15 +12,13 @@ use crate::postgres::utils::max_heap_tuple_size;
 
 #[derive(Clone, Debug)]
 pub struct FileHandleReader {
-    path: PathBuf,
     handle: SegmentHandle,
     relation_oid: u32,
 }
 
 impl FileHandleReader {
-    pub fn new(relation_oid: u32, path: &Path, handle: SegmentHandle) -> Self {
+    pub fn new(relation_oid: u32, handle: SegmentHandle) -> Self {
         Self {
-            path: path.to_path_buf(),
             handle,
             relation_oid,
         }

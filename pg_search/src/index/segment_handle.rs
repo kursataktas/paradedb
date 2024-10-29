@@ -27,7 +27,6 @@ impl SegmentHandle {
     pub unsafe fn open(relation_oid: u32, path: &Path) -> Result<Option<Self>> {
         let cache = BufferCache::open(relation_oid);
         let buffer = cache.get_buffer(SEARCH_META_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
-        let blockno = pg_sys::BufferGetBlockNumber(buffer);
         let page = pg_sys::BufferGetPage(buffer);
 
         let mut offsetno = pg_sys::FirstOffsetNumber;
@@ -76,14 +75,13 @@ impl SegmentHandle {
             total_bytes,
         };
         let serialized: Vec<u8> = serde_json::to_vec(&segment).unwrap();
-        let offsetno = pg_sys::PageAddItemExtended(
+        pg_sys::PageAddItemExtended(
             page,
             serialized.as_ptr() as pg_sys::Item,
             serialized.len(),
             pg_sys::InvalidOffsetNumber,
             0,
         );
-
         pg_sys::MarkBufferDirty(buffer);
         pg_sys::UnlockReleaseBuffer(buffer);
     }

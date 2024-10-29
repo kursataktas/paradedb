@@ -59,21 +59,6 @@ pub trait SearchFs {
     // Return and ensure the existence of the Tantivy index path.
     fn tantivy_dir_path(&self, ensure_exists: bool)
         -> Result<TantivyDirPath, SearchDirectoryError>;
-    /// Get the total size in bytes of the directory.                                                      
-    fn total_size(&self) -> Result<u64> {
-        let path = self.tantivy_dir_path(false)?;
-        let mut total_size = 0;
-
-        for entry in WalkDir::new(path).into_iter().flatten() {
-            if entry.path().is_file() {
-                if let Ok(metadata) = entry.metadata() {
-                    total_size += metadata.len();
-                }
-            }
-        }
-
-        Ok(total_size)
-    }
 }
 
 /// The file location for a pg_search index is:
@@ -94,37 +79,6 @@ impl WriterDirectory {
             index_oid,
             relfilenode,
             postgres_data_dir_path: Self::postgres_data_dir_path(),
-        }
-    }
-
-    pub fn relfile_paths(database_oid: u32, index_oid: u32) -> Result<Vec<Self>> {
-        // We are going to ask Postgres for the data_dir_path here, so its important
-        // to note that this function will cause a runtime in certain contexts,
-        // like within background processes.
-        let postgres_data_dir_path = Self::postgres_data_dir_path();
-        let index_dir_path =
-            postgres_data_dir_path.join(Self::index_dir_path(database_oid, index_oid));
-
-        if index_dir_path.exists() {
-            fs::read_dir(&index_dir_path)
-                .map_err(|err| {
-                    anyhow::Error::from(err).context(format!("index path: {index_dir_path:?}"))
-                })?
-                .filter_map(|entry| entry.ok())
-                .filter(|entry| entry.path().is_dir())
-                .map(|entry| entry.file_name())
-                .filter_map(|name| name.to_str().and_then(|s| s.parse::<u32>().ok()))
-                .map(|relfilenode| {
-                    Ok(Self {
-                        database_oid,
-                        index_oid,
-                        relfilenode,
-                        postgres_data_dir_path: postgres_data_dir_path.clone(),
-                    })
-                })
-                .collect()
-        } else {
-            Ok(vec![])
         }
     }
 
