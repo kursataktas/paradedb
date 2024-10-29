@@ -33,16 +33,7 @@ use tantivy::{Directory, Index};
 use thiserror::Error;
 
 use crate::index::directory::blocking::{BlockingDirectory, META_FILEPATH};
-use crate::index::directory::writer::SearchIndexEntity;
 use crate::index::WriterResources;
-
-/// A global store of which indexes have been created during a transaction,
-/// so that they can be committed or rolled back in case of an abort.
-static mut PENDING_INDEX_CREATES: Lazy<HashSet<SearchIndexEntity>> = Lazy::new(HashSet::new);
-
-/// A global store of which indexes have been dropped during a transaction,
-/// so that they can be committed or rolled back in case of an abort.
-static mut PENDING_INDEX_DROPS: Lazy<HashSet<SearchIndexEntity>> = Lazy::new(HashSet::new);
 
 /// The entity that interfaces with Tantivy indexes.
 pub struct SearchIndexWriter {
@@ -109,12 +100,12 @@ impl SearchIndexWriter {
     }
 
     pub fn create_index(
-        directory: SearchIndexEntity,
+        index_oid: pgrx::pg_sys::Oid,
         fields: Vec<(SearchFieldName, SearchFieldConfig, SearchFieldType)>,
         key_field_index: usize,
     ) -> Result<SearchIndex> {
         let schema = SearchIndexSchema::new(fields, key_field_index)?;
-        let tantivy_dir = BlockingDirectory::new(directory.index_oid);
+        let tantivy_dir = BlockingDirectory::new(index_oid.into());
         let settings = IndexSettings {
             docstore_compress_dedicated_thread: false,
             ..IndexSettings::default()
@@ -123,39 +114,11 @@ impl SearchIndexWriter {
 
         SearchIndex::setup_tokenizers(&mut underlying_index, &schema);
 
-        // Mark in our global store that this index is pending create, in case it
-        // needs to be rolled back on abort.
-        Self::mark_pending_create(&directory);
-
         Ok(SearchIndex {
+            index_oid,
             underlying_index,
-            directory,
             schema,
         })
-    }
-
-    pub fn mark_pending_create(directory: &SearchIndexEntity) -> bool {
-        unsafe { PENDING_INDEX_CREATES.insert(directory.clone()) }
-    }
-
-    pub fn mark_pending_drop(directory: &SearchIndexEntity) -> bool {
-        unsafe { PENDING_INDEX_DROPS.insert(directory.clone()) }
-    }
-
-    pub fn clear_pending_creates() {
-        unsafe { PENDING_INDEX_CREATES.clear() }
-    }
-
-    pub fn clear_pending_drops() {
-        unsafe { PENDING_INDEX_DROPS.clear() }
-    }
-
-    pub fn pending_creates() -> impl Iterator<Item = &'static SearchIndexEntity> {
-        unsafe { PENDING_INDEX_CREATES.iter() }
-    }
-
-    pub fn pending_drops() -> impl Iterator<Item = &'static SearchIndexEntity> {
-        unsafe { PENDING_INDEX_DROPS.iter() }
     }
 }
 

@@ -16,7 +16,6 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use crate::index::directory::blocking::BlockingDirectory;
-use crate::index::directory::writer::SearchIndexEntity;
 use crate::index::{SearchIndex, SearchIndexError};
 use crate::postgres::build::get_fields;
 use crate::schema::SearchIndexSchema;
@@ -29,33 +28,14 @@ pub fn open_search_index(
 ) -> anyhow::Result<SearchIndex, SearchIndexError> {
     let database_oid = unsafe { pg_sys::MyDatabaseId };
     let index_oid = index_relation.oid();
-    let relfilenode = relfilenode_from_pg_relation(index_relation);
-    let directory = SearchIndexEntity::from_oids(
-        database_oid.as_u32(),
-        index_oid.as_u32(),
-        relfilenode.as_u32(),
-    );
     let (fields, key_field_index) = unsafe { get_fields(index_relation) };
     let schema = SearchIndexSchema::new(fields, key_field_index)?;
-    let tantivy_dir = BlockingDirectory::new(directory.index_oid);
+    let tantivy_dir = BlockingDirectory::new(index_oid.into());
     let underlying_index = Index::open(tantivy_dir)?;
 
     Ok(SearchIndex {
         schema,
         underlying_index,
-        directory,
+        index_oid,
     })
-}
-
-/// Retrieves the `relfilenode` from a `PgRelation`, handling PostgreSQL version differences.
-#[inline(always)]
-pub fn relfilenode_from_pg_relation(index_relation: &PgRelation) -> pg_sys::Oid {
-    #[cfg(any(feature = "pg13", feature = "pg14", feature = "pg15"))]
-    {
-        index_relation.rd_node.relNode
-    }
-    #[cfg(any(feature = "pg16", feature = "pg17"))]
-    {
-        index_relation.rd_locator.relNumber
-    }
 }

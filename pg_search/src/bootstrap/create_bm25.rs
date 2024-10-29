@@ -231,7 +231,6 @@ fn index_info(
 
     // open the specified index
     let index = open_search_index(&index).expect("should be able to open search index");
-    let directory = index.directory.clone();
     let data = index
         .underlying_index
         .searchable_segment_metas()?

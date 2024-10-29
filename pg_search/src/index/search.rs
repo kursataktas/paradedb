@@ -88,18 +88,18 @@ impl WriterResources {
 #[derive(Serialize)]
 pub struct SearchIndex {
     pub schema: SearchIndexSchema,
-    pub directory: SearchIndexEntity,
+    pub index_oid: pgrx::pg_sys::Oid,
     #[serde(skip_serializing)]
     pub underlying_index: Index,
 }
 
 impl SearchIndex {
     pub fn create_index(
-        directory: SearchIndexEntity,
+        index_oid: pgrx::pg_sys::Oid,
         fields: Vec<(SearchFieldName, SearchFieldConfig, SearchFieldType)>,
         key_field_index: usize,
     ) -> Result<Self> {
-        SearchIndexWriter::create_index(directory.clone(), fields, key_field_index)
+        SearchIndexWriter::create_index(index_oid, fields, key_field_index)
     }
 
     pub fn get_reader(&self) -> Result<SearchIndexReader> {
@@ -194,34 +194,6 @@ impl SearchIndex {
         writer.insert(document)?;
 
         Ok(())
-    }
-}
-
-impl<'de> Deserialize<'de> for SearchIndex {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        // A helper struct that lets us use the default serialization for most fields.
-        #[derive(Deserialize)]
-        struct SearchIndexHelper {
-            schema: SearchIndexSchema,
-            directory: SearchIndexEntity,
-        }
-
-        // Deserialize into the struct with automatic handling for most fields
-        let SearchIndexHelper { schema, directory } = SearchIndexHelper::deserialize(deserializer)?;
-        let tantivy_dir = BlockingDirectory::new(directory.index_oid);
-        let mut underlying_index = Index::open(tantivy_dir).map_err(serde::de::Error::custom)?;
-        // We need to setup tokenizers again after retrieving an index from disk.
-        Self::setup_tokenizers(&mut underlying_index, &schema);
-
-        // Construct the SearchIndex.
-        Ok(SearchIndex {
-            underlying_index,
-            directory,
-            schema,
-        })
     }
 }
 

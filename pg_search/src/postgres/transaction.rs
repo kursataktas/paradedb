@@ -46,26 +46,13 @@ unsafe extern "C" fn pg_search_xact_callback(
 ) {
     match event {
         pg_sys::XactEvent::XACT_EVENT_PRE_COMMIT => {
-            for _directory in SearchIndexWriter::pending_drops() {
-                todo!("handle any pre-commit drop callback required in block storage")
-            }
-
-            // finally, any indexes that are marked as pending create are now created because the
-            // transaction is committed
-            SearchIndexWriter::clear_pending_drops();
-            SearchIndexWriter::clear_pending_creates();
+            todo!("handle any pre-commit drop callback required in block storage")
         }
 
         pg_sys::XactEvent::XACT_EVENT_ABORT => {
             // first, indexes in our cache that are pending a CREATE need to be dropped
-            for _directory in SearchIndexWriter::pending_creates() {
-                todo!("handle any pre-commit pending create callback required in block storage")
-            }
-
-            SearchIndexWriter::clear_pending_drops();
-            SearchIndexWriter::clear_pending_creates();
+            todo!("handle any pre-commit pending create callback required in block storage")
         }
-
         _ => {
             // not an event we care about
         }

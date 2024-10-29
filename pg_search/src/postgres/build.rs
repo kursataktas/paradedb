@@ -16,11 +16,9 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use crate::index::directory::atomic::AtomicSpecialData;
-use crate::index::directory::writer::SearchIndexEntity;
 use crate::index::segment_handle::SegmentHandleSpecialData;
 use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::buffer::{BufferCache, SEARCH_META_BLOCKNO};
-use crate::postgres::index::relfilenode_from_pg_relation;
 use crate::postgres::insert::init_insert_state;
 use crate::postgres::options::SearchIndexCreateOptions;
 use crate::postgres::utils::row_to_search_document;
@@ -62,8 +60,6 @@ pub extern "C" fn ambuild(
     let heap_relation = unsafe { PgRelation::from_pg(heaprel) };
     let index_relation = unsafe { PgRelation::from_pg(indexrel) };
     let index_oid = index_relation.oid();
-    let database_oid = crate::MyDatabaseId();
-    let relfilenode = relfilenode_from_pg_relation(&index_relation);
 
     // Create the metadata blocks for the index
     unsafe { create_metadata(index_oid.into()) };
@@ -88,10 +84,7 @@ pub extern "C" fn ambuild(
         panic!("no fields specified")
     }
 
-    let directory =
-        SearchIndexEntity::from_oids(database_oid, index_oid.as_u32(), relfilenode.as_u32());
-
-    SearchIndex::create_index(directory, fields, key_field_index)
+    SearchIndex::create_index(index_oid, fields, key_field_index)
         .expect("error creating new index instance");
 
     let state = do_heap_scan(index_info, &heap_relation, &index_relation);
