@@ -1382,3 +1382,74 @@ fn larger_dataset_nested_json(mut conn: PgConnection) {
     .fetch_collect(&mut conn);
     assert_eq!(rows, vec![(4, "Customer D".to_string())]); // Customer D should be found
 }
+
+#[rstest]
+fn no_duplicates_multiple_matches_same_customer(mut conn: PgConnection) {
+    // Create test table with the standard customer data
+    r#"
+    CALL paradedb.create_bm25_test_table(
+        schema_name => 'public',
+        table_name => 'customers',
+        table_type => 'Customers'
+    );
+    "#
+    .execute(&mut conn);
+
+    // Create the BM25 index
+    r#"
+    CALL paradedb.create_bm25(
+        index_name => 'customers',
+        table_name => 'customers',
+        key_field => 'id',
+        text_fields => paradedb.field('name'),
+        json_fields => paradedb.field('crm_data')
+    );
+    "#
+    .execute(&mut conn);
+
+    // Test: Search for Customer D's specific interactions - should match both their email and sms
+    let rows: Vec<(i32, String)> = r#"
+    SELECT id, name, paradedb.score(id)
+    FROM customers WHERE id @@@ 'crm_data.details.subject:(Promotion OR Discount)'
+    ORDER BY score, id DESC;
+    "#
+    .fetch_collect(&mut conn);
+
+    // Verify Customer D appears exactly once despite matching both conditions
+    assert_eq!(
+        rows.len(),
+        1,
+        "Should return Customer D exactly once despite matching multiple conditions"
+    );
+    assert_eq!(
+        rows[0],
+        (4, "Customer D".to_string()),
+        "Should be Customer D"
+    );
+
+    // Double check with a count query
+    let count = r#"
+    SELECT COUNT(DISTINCT id)
+    FROM customers WHERE id @@@ 'crm_data.details.subject:(Promotion OR Discount)'
+    "#
+    .fetch_one::<(i64,)>(&mut conn)
+    .0;
+
+    assert_eq!(count, 1, "Count query should also return 1 for Customer D");
+
+    // Test: Another query that matches both interactions for Customer D
+    let rows: Vec<(i32, String)> = r#"
+    SELECT id, name, paradedb.score(id)
+    FROM customers WHERE id @@@ 'crm_data.interaction:(email OR sms) AND crm_data.details.date:("2023-09-06" OR "2023-09-07")'
+    ORDER BY score, id DESC;
+    "#
+    .fetch_collect(&mut conn);
+
+    // Verify again that Customer D appears exactly once
+    assert_eq!(rows.len(), 1, "Should return Customer D exactly once despite matching on multiple dates and interaction types");
+    assert_eq!(
+        rows[0],
+        (4, "Customer D".to_string()),
+        "Should be Customer D"
+    );
+}
