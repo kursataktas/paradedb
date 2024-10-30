@@ -90,17 +90,22 @@ impl TantivyValue {
         }
     }
 
-    fn json_value_to_tantivy_value(value: Value) -> Box<dyn Iterator<Item = TantivyValue>> {
+    fn json_value_to_tantivy_values(value: Value) -> JsonValueIter {
         // A tantivy JSON value can't be a top-level array, so we have to make
         // separate values out of each entry.
         if let Value::Array(value_vec) = value {
-            Box::new(
+            JsonValueIter::Many(
                 value_vec
                     .into_iter()
-                    .flat_map(Self::json_value_to_tantivy_value),
+                    .flat_map(|v| match Self::json_value_to_tantivy_values(v) {
+                        JsonValueIter::Many(i) => i.collect::<Vec<_>>().into_iter(),
+                        JsonValueIter::One(i) => vec![i.into_iter().next().unwrap()].into_iter(),
+                    })
+                    .collect::<Vec<_>>()
+                    .into_iter(),
             )
         } else {
-            Box::new(std::iter::once(TantivyValue(
+            JsonValueIter::One(std::iter::once(TantivyValue(
                 tantivy::schema::OwnedValue::from(value),
             )))
         }
@@ -156,14 +161,14 @@ impl TantivyValue {
                         .ok_or(TantivyValueError::DatumDeref)?;
                     let json_value: Value =
                         serde_json::from_slice(&serde_json::to_vec(&pgrx_value.0)?)?;
-                    Ok(Self::json_value_to_tantivy_value(json_value).collect())
+                    Ok(Self::json_value_to_tantivy_values(json_value).collect())
                 }
                 PgBuiltInOids::JSONOID => {
                     let pgrx_value = pgrx::Json::from_datum(datum, false)
                         .ok_or(TantivyValueError::DatumDeref)?;
                     let json_value: Value =
                         serde_json::from_slice(&serde_json::to_vec(&pgrx_value.0)?)?;
-                    Ok(Self::json_value_to_tantivy_value(json_value).collect())
+                    Ok(Self::json_value_to_tantivy_values(json_value).collect())
                 }
                 _ => Err(TantivyValueError::UnsupportedJsonOid(oid.value())),
             },
@@ -988,4 +993,20 @@ pub enum TantivyValueError {
 
     #[error("Cannot convert TantivyValue to type {0}")]
     UnsupportedIntoConversion(String),
+}
+
+enum JsonValueIter {
+    Many(std::vec::IntoIter<TantivyValue>),
+    One(std::iter::Once<TantivyValue>),
+}
+
+impl Iterator for JsonValueIter {
+    type Item = TantivyValue;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            JsonValueIter::Many(iter) => iter.next(),
+            JsonValueIter::One(iter) => iter.next(),
+        }
+    }
 }
