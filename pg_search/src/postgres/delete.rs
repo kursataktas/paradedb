@@ -58,7 +58,6 @@ pub extern "C" fn ambulkdelete(
             let ctid_ff = FFType::new(fast_fields, "ctid");
             if let FFType::U64(ff) = ctid_ff {
                 let ctids: Vec<u64> = ff.iter().collect();
-                eprintln!("ctids: {:?}", ctids);
                 request_sender
                     .send(ChannelRequest::ShouldDeleteCtids(ctids))
                     .unwrap();
@@ -66,7 +65,6 @@ pub extern "C" fn ambulkdelete(
                     ChannelResponse::ShouldDeleteCtids(ctids) => ctids,
                     _ => panic!("unexpected response in bulkdelete thread"),
                 };
-                eprintln!("ctids to delete: {:?}", ctids_to_delete);
                 for ctid in ctids_to_delete {
                     let ctid_field = channel_index.schema().get_field("ctid").unwrap();
                     let ctid_term = tantivy::Term::from_field_u64(ctid_field, ctid);

@@ -17,10 +17,10 @@ use tantivy::Directory;
 
 use crate::index::directory::blocking::{BlockingDirectory, BlockingLock};
 use crate::index::reader::channel::ChannelReader;
-use crate::index::reader::file_handle::FileHandleReader;
+use crate::index::reader::segment_handle::SegmentHandleReader;
 use crate::index::segment_handle::SegmentHandle;
 use crate::index::writer::channel::ChannelWriter;
-use crate::index::writer::io::IoWriter;
+use crate::index::writer::segment_handle::SegmentHandleWriter;
 
 #[derive(Debug)]
 pub enum ChannelRequest {
@@ -256,13 +256,13 @@ impl ChannelRequestHandler {
                     drop(blocking_lock);
                 }
                 ChannelRequest::SegmentRead(range, handle) => {
-                    let reader = FileHandleReader::new(self.relation_oid, handle);
+                    let reader = SegmentHandleReader::new(self.relation_oid, handle);
                     let data = reader.read_bytes(range)?;
                     self.sender
                         .send(ChannelResponse::Bytes(data.as_slice().to_owned()))?;
                 }
                 ChannelRequest::SegmentWrite(path, data) => {
-                    let mut writer = unsafe { IoWriter::new(self.relation_oid, &path) };
+                    let mut writer = unsafe { SegmentHandleWriter::new(self.relation_oid, &path) };
                     writer.write_all(data.get_ref())?;
                     writer.terminate()?;
                     self.sender.send(ChannelResponse::SegmentWriteAck)?;

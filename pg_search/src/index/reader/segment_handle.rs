@@ -11,12 +11,12 @@ use crate::postgres::buffer::BufferCache;
 use crate::postgres::utils::max_heap_tuple_size;
 
 #[derive(Clone, Debug)]
-pub struct FileHandleReader {
+pub struct SegmentHandleReader {
     handle: SegmentHandle,
     relation_oid: u32,
 }
 
-impl FileHandleReader {
+impl SegmentHandleReader {
     pub fn new(relation_oid: u32, handle: SegmentHandle) -> Self {
         Self {
             handle,
@@ -25,7 +25,7 @@ impl FileHandleReader {
     }
 }
 
-impl FileHandle for FileHandleReader {
+impl FileHandle for SegmentHandleReader {
     fn read_bytes(&self, range: Range<usize>) -> Result<OwnedBytes, std::io::Error> {
         unsafe {
             const MAX_HEAP_TUPLE_SIZE: usize = unsafe { max_heap_tuple_size() };
@@ -65,7 +65,7 @@ impl FileHandle for FileHandleReader {
     }
 }
 
-impl HasLen for FileHandleReader {
+impl HasLen for SegmentHandleReader {
     fn len(&self) -> usize {
         self.handle.total_bytes
     }

@@ -31,7 +31,6 @@ pub extern "C" fn amvacuumcleanup(
     }
 
     let needs_merge = stats.is_null() || unsafe { (*stats).pages_deleted == 0 };
-    pgrx::info!("needs_merge: {}", needs_merge);
     let index_relation = unsafe { PgRelation::from_pg(info.index) };
     let index_oid: u32 = index_relation.oid().into();
     let (request_sender, request_receiver) = crossbeam::channel::unbounded::<ChannelRequest>();
@@ -55,7 +54,6 @@ pub extern "C" fn amvacuumcleanup(
             let merge_policy = writer.get_merge_policy();
             let segments = channel_index.load_metas().unwrap().segments;
             let candidates = merge_policy.compute_merge_candidates(segments.as_slice());
-            eprintln!("candidates: {:?} segments {:?}", candidates, segments);
             // TODO: Parallelize this?
             for candidate in candidates {
                 writer.merge(&candidate.0).wait().unwrap();
@@ -75,9 +73,7 @@ pub extern "C" fn amvacuumcleanup(
         response_sender,
         request_receiver,
     );
-    let blocking_stats = handler.receive_blocking(Some(|_| false)).unwrap();
-
-    // TODO: Implement merging segments
+    let _ = handler.receive_blocking(Some(|_| false)).unwrap();
     unsafe { pg_sys::IndexFreeSpaceMapVacuum(info.index) };
     stats
 }

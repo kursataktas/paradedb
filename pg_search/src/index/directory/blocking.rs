@@ -30,9 +30,9 @@ use tantivy::{
 };
 
 use crate::index::atomic::AtomicDirectory;
-use crate::index::reader::file_handle::FileHandleReader;
+use crate::index::reader::segment_handle::SegmentHandleReader;
 use crate::index::segment_handle::SegmentHandle;
-use crate::index::writer::io::IoWriter;
+use crate::index::writer::segment_handle::SegmentHandleWriter;
 use crate::postgres::buffer::{BufferCache, INDEX_WRITER_LOCK_BLOCKNO};
 
 /// Defined by Tantivy in core/mod.rs
@@ -130,12 +130,15 @@ impl Directory for BlockingDirectory {
                 .expect("segment handle should exist")
         };
 
-        Ok(Arc::new(FileHandleReader::new(self.relation_oid, handle)))
+        Ok(Arc::new(SegmentHandleReader::new(
+            self.relation_oid,
+            handle,
+        )))
     }
 
     fn open_write(&self, path: &Path) -> result::Result<WritePtr, OpenWriteError> {
         Ok(io::BufWriter::new(Box::new(unsafe {
-            IoWriter::new(self.relation_oid, path)
+            SegmentHandleWriter::new(self.relation_oid, path)
         })))
     }
 

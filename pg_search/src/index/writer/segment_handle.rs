@@ -8,7 +8,7 @@ use crate::postgres::buffer::BufferCache;
 use crate::postgres::utils::max_heap_tuple_size;
 
 #[derive(Clone, Debug)]
-pub struct IoWriter {
+pub struct SegmentHandleWriter {
     relation_oid: u32,
     path: PathBuf,
     data: Cursor<Vec<u8>>,
@@ -16,7 +16,7 @@ pub struct IoWriter {
     total_bytes: usize,
 }
 
-impl IoWriter {
+impl SegmentHandleWriter {
     pub unsafe fn new(relation_oid: u32, path: &Path) -> Self {
         Self {
             relation_oid,
@@ -28,7 +28,7 @@ impl IoWriter {
     }
 }
 
-impl Write for IoWriter {
+impl Write for SegmentHandleWriter {
     // This function will attempt to write the entire contents of `buf`, but
     // the entire write might not succeed, or the write may also generate an
     // error. Typically, a call to `write` represents one attempt to write to
@@ -85,7 +85,7 @@ impl Write for IoWriter {
     }
 }
 
-impl TerminatingWrite for IoWriter {
+impl TerminatingWrite for SegmentHandleWriter {
     fn terminate_ref(&mut self, _: AntiCallToken) -> Result<()> {
         unsafe {
             const MAX_HEAP_TUPLE_SIZE: usize = unsafe { max_heap_tuple_size() };
