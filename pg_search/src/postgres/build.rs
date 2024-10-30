@@ -20,7 +20,7 @@ use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::index::relfilenode_from_pg_relation;
 use crate::postgres::insert::init_insert_state;
 use crate::postgres::options::SearchIndexCreateOptions;
-use crate::postgres::utils::row_to_search_document;
+use crate::postgres::utils::row_to_search_documents;
 use crate::schema::{IndexRecordOption, SearchFieldConfig, SearchFieldName, SearchFieldType};
 use pgrx::*;
 use std::collections::HashMap;
@@ -313,8 +313,8 @@ unsafe fn build_callback_internal(
     unsafe {
         build_state.memctx.reset();
         build_state.memctx.switch_to(|_| {
-            let search_document =
-                row_to_search_document(ctid, tupdesc, values, isnull, schema).unwrap_or_else(|err| {
+            let search_documents =
+                row_to_search_documents(ctid, tupdesc, values, isnull, schema).unwrap_or_else(|err| {
                     panic!(
                         "error creating index entries for index '{}': {err}",
                         CStr::from_ptr((*(*indexrel).rd_rel).relname.data.as_ptr())
@@ -322,11 +322,14 @@ unsafe fn build_callback_internal(
                     );
                 });
 
+        for document in search_documents {
             search_index
-                .insert(writer, search_document)
+                .insert(writer, document)
                 .unwrap_or_else(|err| {
                     panic!("error inserting document during build callback.  See Postgres log for more information: {err:?}")
                 });
+                
+            }
         });
         build_state.memctx.reset();
 

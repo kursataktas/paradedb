@@ -18,7 +18,7 @@
 use crate::index::SearchIndexWriter;
 use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::index::open_search_index;
-use crate::postgres::utils::row_to_search_document;
+use crate::postgres::utils::row_to_search_documents;
 use pgrx::{pg_guard, pg_sys, pgrx_extern_c_guard, PgMemoryContexts, PgRelation, PgTupleDesc};
 use std::ffi::CStr;
 use std::panic::{catch_unwind, resume_unwind};
@@ -135,8 +135,8 @@ unsafe fn aminsert_internal(
         let tupdesc = PgTupleDesc::from_pg_unchecked((*index_relation).rd_att);
         let search_index = &state.index;
         let writer = &state.writer;
-        let search_document =
-            row_to_search_document(*ctid, &tupdesc, values, isnull, &search_index.schema)
+        let search_documents =
+            row_to_search_documents(*ctid, &tupdesc, values, isnull, &search_index.schema)
                 .unwrap_or_else(|err| {
                     panic!(
                         "error creating index entries for index '{}': {err}",
@@ -144,9 +144,12 @@ unsafe fn aminsert_internal(
                             .to_string_lossy()
                     );
                 });
-        search_index
-            .insert(writer, search_document)
-            .expect("insertion into index should succeed");
+
+        for document in search_documents {
+            search_index
+                .insert(writer, document)
+                .expect("insertion into index should succeed");
+        }
         true
     });
 

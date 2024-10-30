@@ -90,19 +90,20 @@ impl TantivyValue {
         }
     }
 
-    fn json_value_to_tantivy_value(value: Value) -> Vec<TantivyValue> {
-        let mut tantivy_values = vec![];
-        match value {
-            // A tantivy JSON value can't be a top-level array, so we have to make
-            // separate values out of each entry.
-            Value::Array(value_vec) => {
-                for value in value_vec {
-                    tantivy_values.extend_from_slice(&Self::json_value_to_tantivy_value(value));
-                }
-            }
-            _ => tantivy_values.push(TantivyValue(tantivy::schema::OwnedValue::from(value))),
+    fn json_value_to_tantivy_value(value: Value) -> Box<dyn Iterator<Item = TantivyValue>> {
+        // A tantivy JSON value can't be a top-level array, so we have to make
+        // separate values out of each entry.
+        if let Value::Array(value_vec) = value {
+            Box::new(
+                value_vec
+                    .into_iter()
+                    .flat_map(Self::json_value_to_tantivy_value),
+            )
+        } else {
+            Box::new(std::iter::once(TantivyValue(
+                tantivy::schema::OwnedValue::from(value),
+            )))
         }
-        tantivy_values
     }
 
     pub unsafe fn try_from_datum_array(
@@ -155,14 +156,14 @@ impl TantivyValue {
                         .ok_or(TantivyValueError::DatumDeref)?;
                     let json_value: Value =
                         serde_json::from_slice(&serde_json::to_vec(&pgrx_value.0)?)?;
-                    Ok(Self::json_value_to_tantivy_value(json_value))
+                    Ok(Self::json_value_to_tantivy_value(json_value).collect())
                 }
                 PgBuiltInOids::JSONOID => {
                     let pgrx_value = pgrx::Json::from_datum(datum, false)
                         .ok_or(TantivyValueError::DatumDeref)?;
                     let json_value: Value =
                         serde_json::from_slice(&serde_json::to_vec(&pgrx_value.0)?)?;
-                    Ok(Self::json_value_to_tantivy_value(json_value))
+                    Ok(Self::json_value_to_tantivy_value(json_value).collect())
                 }
                 _ => Err(TantivyValueError::UnsupportedJsonOid(oid.value())),
             },
