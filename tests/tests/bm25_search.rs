@@ -1237,27 +1237,14 @@ fn json_array_term(mut conn: PgConnection) {
 #[rstest]
 fn separate_nested_json_docs(mut conn: PgConnection) {
     r#"
-    CREATE TABLE customers (
-        id SERIAL PRIMARY KEY,
-        name TEXT,
-        crm_data JSONB
+    CALL paradedb.create_bm25_test_table(
+        schema_name => 'public',
+        table_name => 'customers',
+        table_type => 'Customers'
     );
 
-    INSERT INTO customers (name, crm_data)
-    VALUES 
-    ('Customer A', '[{
-            "interaction": "call",
-            "details": {
-                "subject": "Welcome Call",
-                "date": "2023-09-01"
-            }
-        }, {
-            "interaction": "email",
-            "details": {
-                "subject": "Goodbye Email",
-                "date": "2023-09-02"
-            }
-        }]'::JSONB
+    DELETE FROM customers  WHERE id NOT IN (
+        SELECT id FROM customers ORDER BY id LIMIT 1
     );
     "#
     .execute(&mut conn);
@@ -1277,7 +1264,7 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:call AND crm_data.details.subject:Goodbye'
-    ORDER BY score;
+    ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(rows.len(), 0); // Customer A should NOT be found
@@ -1286,7 +1273,7 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:email AND crm_data.details.subject:Goodbye'
-    ORDER BY score;
+    ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(rows, vec![(1, "Customer A".to_string())]); // Customer A should be found
@@ -1295,7 +1282,7 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:sms AND crm_data.details.subject:Reminder'
-    ORDER BY score;
+    ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(rows.len(), 0); // No customers should be found
@@ -1304,7 +1291,7 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:call'
-    ORDER BY score;
+    ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(rows, vec![(1, "Customer A".to_string())]); // Customer A should be found
@@ -1312,82 +1299,12 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
 
 #[rstest]
 fn larger_dataset_nested_json(mut conn: PgConnection) {
-    // Create the table and insert dataset
     r#"
-    CREATE TABLE customers (
-        id SERIAL PRIMARY KEY,
-        name TEXT,
-        crm_data JSONB
+    CALL paradedb.create_bm25_test_table(
+        schema_name => 'public',
+        table_name => 'customers',
+        table_type => 'Customers'
     );
-
-    INSERT INTO customers (name, crm_data)
-    VALUES 
-    ('Customer A', '[{
-            "interaction": "call",
-            "details": {
-                "subject": "Welcome Call",
-                "date": "2023-09-01"
-            }
-        }, {
-            "interaction": "email",
-            "details": {
-                "subject": "Goodbye Email",
-                "date": "2023-09-02"
-            }
-        }]'::JSONB),
-    ('Customer B', '[{
-            "interaction": "sms",
-            "details": {
-                "subject": "Reminder",
-                "date": "2023-09-01"
-            }
-        }, {
-            "interaction": "email",
-            "details": {
-                "subject": "Update",
-                "date": "2023-09-03"
-            }
-        }]'::JSONB),
-    -- Add a lot more entries for more comprehensive testing
-    ('Customer C', '[{
-            "interaction": "call",
-            "details": {
-                "subject": "Service Call",
-                "date": "2023-09-04"
-            }
-        }, {
-            "interaction": "sms",
-            "details": {
-                "subject": "Follow-up",
-                "date": "2023-09-05"
-            }
-        }]'::JSONB),
-    ('Customer D', '[{
-            "interaction": "email",
-            "details": {
-                "subject": "Promotion",
-                "date": "2023-09-06"
-            }
-        }, {
-            "interaction": "sms",
-            "details": {
-                "subject": "Discount",
-                "date": "2023-09-07"
-            }
-        }]'::JSONB),
-    ('Customer E', '[{
-            "interaction": "call",
-            "details": {
-                "subject": "Inquiry",
-                "date": "2023-09-08"
-            }
-        }, {
-            "interaction": "email",
-            "details": {
-                "subject": "Notification",
-                "date": "2023-09-09"
-            }
-        }]'::JSONB);
     "#
     .execute(&mut conn);
 
@@ -1408,7 +1325,7 @@ fn larger_dataset_nested_json(mut conn: PgConnection) {
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:call AND crm_data.details.subject:"Service Call"'
-    ORDER BY score;
+    ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(rows, vec![(3, "Customer C".to_string())]); // Customer C should be found
@@ -1417,7 +1334,7 @@ fn larger_dataset_nested_json(mut conn: PgConnection) {
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:email'
-    ORDER BY score;
+    ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(rows.len(), 4); //  4/5 customers have an email interaction
@@ -1426,7 +1343,7 @@ fn larger_dataset_nested_json(mut conn: PgConnection) {
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:sms AND crm_data.details.subject:Reminder'
-    ORDER BY score;
+    ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(rows, vec![(2, "Customer B".to_string())]); // Customer B should be found
@@ -1435,15 +1352,15 @@ fn larger_dataset_nested_json(mut conn: PgConnection) {
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:call'
-    ORDER BY score;
+    ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(
         rows,
         vec![
+            (5, "Customer E".to_string()),
             (3, "Customer C".to_string()),
             (1, "Customer A".to_string()),
-            (5, "Customer E".to_string())
         ]
     ); // Customers A, C, and E should be found
 
@@ -1451,7 +1368,7 @@ fn larger_dataset_nested_json(mut conn: PgConnection) {
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:fax'
-    ORDER BY score;
+    ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(rows.len(), 0); // No customer should be found
@@ -1460,7 +1377,7 @@ fn larger_dataset_nested_json(mut conn: PgConnection) {
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.details.subject:Promotion AND crm_data.details.date:"2023-09-06"'
-    ORDER BY score;
+    ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(rows, vec![(4, "Customer D".to_string())]); // Customer D should be found
