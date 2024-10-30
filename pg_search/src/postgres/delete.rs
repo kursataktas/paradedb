@@ -38,43 +38,58 @@ pub extern "C" fn ambulkdelete(
     let index_oid: u32 = index_relation.oid().into();
     let (request_sender, request_receiver) = crossbeam::channel::unbounded::<ChannelRequest>();
     let (response_sender, response_receiver) = crossbeam::channel::unbounded::<ChannelResponse>();
+    let request_sender_clone = request_sender.clone();
 
     std::thread::spawn(move || {
-        let channel_directory =
-            ChannelDirectory::new(request_sender.clone(), response_receiver.clone());
-        let channel_index = Index::open(channel_directory).expect("channel index should open");
-        let reader = channel_index
-            .reader_builder()
-            .reload_policy(tantivy::ReloadPolicy::Manual)
-            .try_into()
-            .unwrap();
-        let (parallelism, memory_budget) = WriterResources::Vacuum.resources();
-        let mut writer: IndexWriter = channel_index
-            .writer_with_num_threads(parallelism.into(), memory_budget)
-            .unwrap();
+        let result = std::panic::catch_unwind(move || {
+            let channel_directory =
+                ChannelDirectory::new(request_sender.clone(), response_receiver.clone());
+            let channel_index = Index::open(channel_directory).expect("channel index should open");
+            let reader = channel_index
+                .reader_builder()
+                .reload_policy(tantivy::ReloadPolicy::Manual)
+                .try_into()
+                .unwrap();
+            let (parallelism, memory_budget) = WriterResources::Vacuum.resources();
+            let mut writer: IndexWriter = channel_index
+                .writer_with_num_threads(parallelism.into(), memory_budget)
+                .unwrap();
 
-        for segment_reader in reader.searcher().segment_readers() {
-            let fast_fields = segment_reader.fast_fields();
-            let ctid_ff = FFType::new(fast_fields, "ctid");
-            if let FFType::U64(ff) = ctid_ff {
-                let ctids: Vec<u64> = ff.iter().collect();
-                request_sender
-                    .send(ChannelRequest::ShouldDeleteCtids(ctids))
-                    .unwrap();
-                let ctids_to_delete = match response_receiver.recv().unwrap() {
-                    ChannelResponse::ShouldDeleteCtids(ctids) => ctids,
-                    _ => panic!("unexpected response in bulkdelete thread"),
-                };
-                for ctid in ctids_to_delete {
-                    let ctid_field = channel_index.schema().get_field("ctid").unwrap();
-                    let ctid_term = tantivy::Term::from_field_u64(ctid_field, ctid);
-                    writer.delete_term(ctid_term);
+            for segment_reader in reader.searcher().segment_readers() {
+                let fast_fields = segment_reader.fast_fields();
+                let ctid_ff = FFType::new(fast_fields, "ctid");
+                if let FFType::U64(ff) = ctid_ff {
+                    let ctids: Vec<u64> = ff.iter().collect();
+                    request_sender
+                        .send(ChannelRequest::ShouldDeleteCtids(ctids))
+                        .unwrap();
+                    let ctids_to_delete = match response_receiver.recv().unwrap() {
+                        ChannelResponse::ShouldDeleteCtids(ctids) => ctids,
+                        _ => panic!("unexpected response in bulkdelete thread"),
+                    };
+                    for ctid in ctids_to_delete {
+                        let ctid_field = channel_index.schema().get_field("ctid").unwrap();
+                        let ctid_term = tantivy::Term::from_field_u64(ctid_field, ctid);
+                        writer.delete_term(ctid_term);
+                    }
                 }
             }
+            writer.commit().unwrap();
+            writer.wait_merging_threads().unwrap();
+            request_sender.send(ChannelRequest::Terminate).unwrap();
+        });
+
+        match result {
+            Ok(_) => request_sender_clone
+                .send(ChannelRequest::Terminate)
+                .unwrap(),
+            Err(err) => {
+                eprintln!("Delete thread panicked: {:?}", err);
+                request_sender_clone
+                    .send(ChannelRequest::Terminate)
+                    .unwrap();
+            }
         }
-        writer.commit().unwrap();
-        writer.wait_merging_threads().unwrap();
-        request_sender.send(ChannelRequest::Terminate).unwrap();
     });
 
     let blocking_directory = BlockingDirectory::new(index_oid);

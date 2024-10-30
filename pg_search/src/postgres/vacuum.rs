@@ -35,35 +35,44 @@ pub extern "C" fn amvacuumcleanup(
     let index_oid: u32 = index_relation.oid().into();
     let (request_sender, request_receiver) = crossbeam::channel::unbounded::<ChannelRequest>();
     let (response_sender, response_receiver) = crossbeam::channel::unbounded::<ChannelResponse>();
+    let request_sender_clone = request_sender.clone();
 
     std::thread::spawn(move || {
-        let channel_directory =
-            ChannelDirectory::new(request_sender.clone(), response_receiver.clone());
-        let channel_index = Index::open(channel_directory).expect("channel index should open");
-        let reader = channel_index
-            .reader_builder()
-            .reload_policy(tantivy::ReloadPolicy::Manual)
-            .try_into()
-            .unwrap();
-        let (parallelism, memory_budget) = WriterResources::Vacuum.resources();
-        let mut writer: IndexWriter = channel_index
-            .writer_with_num_threads(parallelism.into(), memory_budget)
-            .unwrap();
+        let result = std::panic::catch_unwind(move || {
+            let channel_directory =
+                ChannelDirectory::new(request_sender.clone(), response_receiver.clone());
+            let channel_index = Index::open(channel_directory).expect("channel index should open");
+            let (parallelism, memory_budget) = WriterResources::Vacuum.resources();
+            let mut writer: IndexWriter = channel_index
+                .writer_with_num_threads(parallelism.into(), memory_budget)
+                .unwrap();
 
-        if needs_merge {
-            let merge_policy = writer.get_merge_policy();
-            let segments = channel_index.load_metas().unwrap().segments;
-            let candidates = merge_policy.compute_merge_candidates(segments.as_slice());
-            // TODO: Parallelize this?
-            for candidate in candidates {
-                writer.merge(&candidate.0).wait().unwrap();
+            if needs_merge {
+                let merge_policy = writer.get_merge_policy();
+                let segments = channel_index.load_metas().unwrap().segments;
+                let candidates = merge_policy.compute_merge_candidates(segments.as_slice());
+                // TODO: Parallelize this?
+                for candidate in candidates {
+                    writer.merge(&candidate.0).wait().unwrap();
+                }
+            }
+
+            writer.garbage_collect_files().wait().unwrap();
+            writer.commit().unwrap();
+            writer.wait_merging_threads().unwrap();
+        });
+
+        match result {
+            Ok(_) => request_sender_clone
+                .send(ChannelRequest::Terminate)
+                .unwrap(),
+            Err(err) => {
+                eprintln!("Vacuum thread panicked: {:?}", err);
+                request_sender_clone
+                    .send(ChannelRequest::Terminate)
+                    .unwrap();
             }
         }
-
-        writer.garbage_collect_files().wait().unwrap();
-        writer.commit().unwrap();
-        writer.wait_merging_threads().unwrap();
-        request_sender.send(ChannelRequest::Terminate).unwrap();
     });
 
     let blocking_directory = BlockingDirectory::new(index_oid);
