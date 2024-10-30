@@ -1298,7 +1298,7 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
 }
 
 #[rstest]
-fn larger_dataset_nested_json(mut conn: PgConnection) {
+fn test_nested_json_array_conditions(mut conn: PgConnection) {
     r#"
     CALL paradedb.create_bm25_test_table(
         schema_name => 'public',
@@ -1314,73 +1314,85 @@ fn larger_dataset_nested_json(mut conn: PgConnection) {
         table_name => 'customers',
         key_field => 'id',
         text_fields => paradedb.field('name'),
-        json_fields => paradedb.field('crm_data')
+        json_fields => paradedb.field('crm_data', fast => true)
     );
     "#
     .execute(&mut conn);
 
-    // Querying the entire dataset with various conditions
+    // Test 1: Should NOT match when conditions are in different objects
+    // Customer A has "call" and "Welcome Call" in first object, "Goodbye Email" in second
+    let rows: Vec<(i32, String)> = r#"
+    SELECT id, name, paradedb.score(id)
+    FROM customers WHERE id @@@ 'crm_data.interaction:call AND crm_data.details.subject:"Goodbye Email"'
+    ORDER BY score, id DESC;
+    "#
+    .fetch_collect(&mut conn);
+    assert_eq!(
+        rows.len(),
+        0,
+        "Should not match across different objects in Customer A's array"
+    );
 
-    // Test: Find customers with a 'call' interaction and a subject 'Service Call'
+    // Test 2: Should match when conditions are in same object
+    // Customer C has "call" and "Service Call" in the same object
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:call AND crm_data.details.subject:"Service Call"'
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
-    assert_eq!(rows, vec![(3, "Customer C".to_string())]); // Customer C should be found
+    assert_eq!(
+        rows,
+        vec![(3, "Customer C".to_string())],
+        "Should match conditions in same object"
+    );
 
-    // Test: Query for multiple documents
+    // Test 3: Should not match across dates and interactions in different objects
+    // Customer B has "sms" with "2023-09-01" in first object, "email" with "2023-09-03" in second
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
-    FROM customers WHERE id @@@ 'crm_data.interaction:email'
+    FROM customers WHERE id @@@ paradedb.boolean(
+        must => ARRAY[
+            paradedb.term('crm_data.interaction', 'email'),
+            paradedb.range('crm_data.details.date', '[2023-09-01, 2023-09-01]'::daterange)
+        ]
+    )
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
-    assert_eq!(rows.len(), 4); //  4/5 customers have an email interaction
+    assert_eq!(
+        rows.len(),
+        0,
+        "Should not match date and interaction across different objects"
+    );
 
-    // Test: Complex query that checks multiple fields across many customers
+    // Test 4: Should match multiple conditions in same object
+    // Customer D has "email" and "Promotion" in same object
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
-    FROM customers WHERE id @@@ 'crm_data.interaction:sms AND crm_data.details.subject:Reminder'
-    ORDER BY score, id DESC;
-    "#
-    .fetch_collect(&mut conn);
-    assert_eq!(rows, vec![(2, "Customer B".to_string())]); // Customer B should be found
-
-    // Test: Search that results in multiple matches
-    let rows: Vec<(i32, String)> = r#"
-    SELECT id, name, paradedb.score(id)
-    FROM customers WHERE id @@@ 'crm_data.interaction:call'
+    FROM customers WHERE id @@@ 'crm_data.interaction:email AND crm_data.details.subject:Promotion AND crm_data.details.date:"2023-09-06"'
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(
         rows,
-        vec![
-            (5, "Customer E".to_string()),
-            (3, "Customer C".to_string()),
-            (1, "Customer A".to_string()),
-        ]
-    ); // Customers A, C, and E should be found
+        vec![(4, "Customer D".to_string())],
+        "Should match multiple conditions in same object"
+    );
 
-    // Test: No matches for a non-existing interaction
+    // Test 5: Should not match when subject and date are from different objects
+    // Customer E has "call"/"Inquiry"/"2023-09-08" in first object, "email"/"Notification"/"2023-09-09" in second
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
-    FROM customers WHERE id @@@ 'crm_data.interaction:fax'
+    FROM customers WHERE id @@@ 'crm_data.details.subject:Inquiry AND crm_data.details.date:"2023-09-09"'
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
-    assert_eq!(rows.len(), 0); // No customer should be found
-
-    // Test: Query with many conditions across fields
-    let rows: Vec<(i32, String)> = r#"
-    SELECT id, name, paradedb.score(id)
-    FROM customers WHERE id @@@ 'crm_data.details.subject:Promotion AND crm_data.details.date:"2023-09-06"'
-    ORDER BY score, id DESC;
-    "#
-    .fetch_collect(&mut conn);
-    assert_eq!(rows, vec![(4, "Customer D".to_string())]); // Customer D should be found
+    assert_eq!(
+        rows.len(),
+        0,
+        "Should not match subject and date across different objects"
+    );
 }
 
 #[rstest]
