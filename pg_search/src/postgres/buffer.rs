@@ -24,17 +24,27 @@ impl BufferCache {
 
     pub unsafe fn new_buffer(&self, special_size: usize) -> pg_sys::Buffer {
         // Providing an InvalidBlockNumber creates a new page
-        let blockno = pg_sys::GetFreeIndexPage(self.boxed.as_ptr());
-        pgrx::info!("Creating new buffer for blockno {}", blockno);
-        let buffer = self.get_buffer(
-            pg_sys::InvalidBlockNumber,
-            Some(pg_sys::BUFFER_LOCK_EXCLUSIVE),
-        );
-        pg_sys::PageInit(
-            pg_sys::BufferGetPage(buffer),
-            pg_sys::BufferGetPageSize(buffer),
-            special_size,
-        );
+        let mut blockno = pg_sys::GetFreeIndexPage(self.boxed.as_ptr());
+        let mut buffer = self.get_buffer(blockno, None);
+
+        // If we can't acquire a conditional lock on the buffer, it's being used by another process
+        // and we need to look for a new one
+        while blockno != pg_sys::InvalidBlockNumber && !pg_sys::ConditionalLockBuffer(buffer) {
+            pg_sys::ReleaseBuffer(buffer);
+            blockno = pg_sys::GetFreeIndexPage(self.boxed.as_ptr());
+            buffer = self.get_buffer(blockno, None);
+        }
+
+        pgrx::info!("New buffer with blockno {}", blockno);
+        if blockno == pg_sys::InvalidBlockNumber {
+            pg_sys::LockBuffer(buffer, pg_sys::BUFFER_LOCK_EXCLUSIVE as i32);
+        }
+
+        let page = pg_sys::BufferGetPage(buffer);
+        if pg_sys::PageIsNew(page) {
+            pg_sys::PageInit(page, pg_sys::BufferGetPageSize(buffer), special_size);
+        }
+
         pg_sys::MarkBufferDirty(buffer);
         // Returns the BlockNumber of the newly-created page
         buffer

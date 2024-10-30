@@ -26,20 +26,58 @@ pub extern "C" fn amvacuumcleanup(
     stats: *mut pg_sys::IndexBulkDeleteResult,
 ) -> *mut pg_sys::IndexBulkDeleteResult {
     let info = unsafe { PgBox::from_pg(info) };
-    if stats.is_null() || info.analyze_only {
+    if info.analyze_only {
         return stats;
     }
 
-    let pages_deleted = unsafe { (*stats).pages_deleted };
-    // If pages were deleted, then ambulkdelete already merged segments, no need to merge again
-    if pages_deleted > 0 {
-        pgrx::info!("pages were deleted, no need to merge segments");
-        unsafe { pg_sys::IndexFreeSpaceMapVacuum(info.index) };
-        return stats;
-    }
+    let needs_merge = stats.is_null() || unsafe { (*stats).pages_deleted == 0 };
+    pgrx::info!("needs_merge: {}", needs_merge);
+    let index_relation = unsafe { PgRelation::from_pg(info.index) };
+    let index_oid: u32 = index_relation.oid().into();
+    let (request_sender, request_receiver) = crossbeam::channel::unbounded::<ChannelRequest>();
+    let (response_sender, response_receiver) = crossbeam::channel::unbounded::<ChannelResponse>();
+
+    std::thread::spawn(move || {
+        let channel_directory =
+            ChannelDirectory::new(request_sender.clone(), response_receiver.clone());
+        let channel_index = Index::open(channel_directory).expect("channel index should open");
+        let reader = channel_index
+            .reader_builder()
+            .reload_policy(tantivy::ReloadPolicy::Manual)
+            .try_into()
+            .unwrap();
+        let (parallelism, memory_budget) = WriterResources::Vacuum.resources();
+        let mut writer: IndexWriter = channel_index
+            .writer_with_num_threads(parallelism.into(), memory_budget)
+            .unwrap();
+
+        if needs_merge {
+            let merge_policy = writer.get_merge_policy();
+            let segments = channel_index.load_metas().unwrap().segments;
+            let candidates = merge_policy.compute_merge_candidates(segments.as_slice());
+            eprintln!("candidates: {:?} segments {:?}", candidates, segments);
+            // TODO: Parallelize this?
+            for candidate in candidates {
+                writer.merge(&candidate.0).wait().unwrap();
+            }
+        }
+
+        writer.garbage_collect_files().wait().unwrap();
+        writer.commit().unwrap();
+        writer.wait_merging_threads().unwrap();
+        request_sender.send(ChannelRequest::Terminate).unwrap();
+    });
+
+    let blocking_directory = BlockingDirectory::new(index_oid);
+    let handler = ChannelRequestHandler::open(
+        blocking_directory,
+        index_oid,
+        response_sender,
+        request_receiver,
+    );
+    let blocking_stats = handler.receive_blocking(Some(|_| false)).unwrap();
 
     // TODO: Implement merging segments
-    // Do we need to garbage collect?
-
+    unsafe { pg_sys::IndexFreeSpaceMapVacuum(info.index) };
     stats
 }

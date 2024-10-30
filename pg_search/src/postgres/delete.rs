@@ -40,7 +40,6 @@ pub extern "C" fn ambulkdelete(
     let (response_sender, response_receiver) = crossbeam::channel::unbounded::<ChannelResponse>();
 
     std::thread::spawn(move || {
-        eprintln!("Spawning thread");
         let channel_directory =
             ChannelDirectory::new(request_sender.clone(), response_receiver.clone());
         let channel_index = Index::open(channel_directory).expect("channel index should open");
@@ -75,9 +74,8 @@ pub extern "C" fn ambulkdelete(
                 }
             }
         }
-        writer.prepare_commit().unwrap().commit().unwrap();
+        writer.commit().unwrap();
         writer.wait_merging_threads().unwrap();
-        eprintln!("Thread done");
         request_sender.send(ChannelRequest::Terminate).unwrap();
     });
 
