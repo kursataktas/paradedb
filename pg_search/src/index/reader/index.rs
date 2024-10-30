@@ -15,7 +15,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use super::SearchIndex;
+use crate::index::SearchIndex;
+use crate::index::fast_fields_helper::FFType;
 use crate::query::SearchQueryInput;
 use crate::schema::{SearchFieldName, SearchIndexSchema};
 use anyhow::Result;
@@ -231,7 +232,7 @@ impl SearchIndexReader {
     pub fn search_via_channel(
         &self,
         _need_scores: bool,
-        _key_field: Option<String>,
+        _sort_segments_by_ctid: bool,
         executor: &'static Executor,
         query: &dyn Query,
     ) -> SearchResults {
@@ -254,23 +255,16 @@ impl SearchIndexReader {
         let mut top_docs = Vec::with_capacity(results.len());
         for (_ff_u64_value, doc_address) in results {
             let segment_reader = self.searcher.segment_reader(doc_address.segment_ord);
-            let fast_fields = segment_reader.fast_fields();
-            let ctid_ff = FFType::new(fast_fields, "ctid");
+            let ctid_ff = segment_reader
+                .fast_fields()
+                .u64("ctid")
+                .expect("ctid should be a fast field");
 
-            let ctid = ctid_ff
-                .as_u64(doc_address.doc_id)
-                .expect("DocId should have a ctid");
-
-            let scored = SearchIndexScore {
-                bm25: f32::NAN,
-                key: None,
-                ctid,
-            };
-
+            let scored = SearchIndexScore::new(&ctid_ff, doc_address.doc_id, 1.0);
             top_docs.push((scored, doc_address));
         }
 
-        SearchResults::TopN(top_docs.len(), top_docs.into_iter())
+        SearchResults::TopNByField(top_docs.len(), top_docs.into_iter())
     }
 
     /// Search a specific index segment for matching documents.
@@ -476,7 +470,7 @@ impl SearchIndexReader {
 }
 
 mod collector {
-    use crate::index::reader::SearchIndexScore;
+    use crate::index::reader::index::SearchIndexScore;
     use tantivy::collector::{Collector, SegmentCollector};
     use tantivy::fastfield::Column;
     use tantivy::{DocAddress, DocId, Score, SegmentOrdinal, SegmentReader};
@@ -565,7 +559,7 @@ mod collector {
 }
 
 mod vec_collector {
-    use crate::index::reader::SearchIndexScore;
+    use crate::index::reader::index::SearchIndexScore;
     use tantivy::collector::{Collector, SegmentCollector};
     use tantivy::fastfield::Column;
     use tantivy::{DocAddress, DocId, Score, SegmentOrdinal, SegmentReader};

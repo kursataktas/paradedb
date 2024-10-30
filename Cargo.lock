@@ -211,7 +211,7 @@ dependencies = [
  "async-task",
  "concurrent-queue",
  "fastrand 2.1.1",
- "futures-lite 2.3.0",
+ "futures-lite 2.4.0",
  "slab",
 ]
 
@@ -226,7 +226,7 @@ dependencies = [
  "async-io 2.3.4",
  "async-lock 3.4.0",
  "blocking",
- "futures-lite 2.3.0",
+ "futures-lite 2.4.0",
  "once_cell",
 ]
 
@@ -260,10 +260,10 @@ dependencies = [
  "cfg-if",
  "concurrent-queue",
  "futures-io",
- "futures-lite 2.3.0",
+ "futures-lite 2.4.0",
  "parking",
  "polling 3.7.3",
- "rustix 0.38.37",
+ "rustix 0.38.38",
  "slab",
  "tracing",
  "windows-sys 0.59.0",
@@ -304,7 +304,7 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-io",
- "futures-lite 2.3.0",
+ "futures-lite 2.4.0",
  "gloo-timers",
  "kv-log-macro",
  "log",
@@ -525,7 +525,7 @@ dependencies = [
  "async-channel 2.3.1",
  "async-task",
  "futures-io",
- "futures-lite 2.3.0",
+ "futures-lite 2.4.0",
  "piper",
 ]
 
@@ -583,7 +583,7 @@ dependencies = [
  "glob",
  "itertools 0.12.1",
  "once_cell",
- "reqwest 0.12.8",
+ "reqwest 0.12.9",
  "rstest 0.18.2",
  "serde",
  "serde_json",
@@ -1411,7 +1411,7 @@ version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7e180ac76c23b45e767bd7ae9579bc0bb458618c4bc71835926e098e61d15f8"
 dependencies = [
- "rustix 0.38.37",
+ "rustix 0.38.38",
  "windows-sys 0.52.0",
 ]
 
@@ -1497,9 +1497,9 @@ dependencies = [
 
 [[package]]
 name = "futures-lite"
-version = "2.3.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52527eb5074e35e9339c6b4e8d12600c7128b68fb25dcb9fa9dec18f7c25f3a5"
+checksum = "3f1fa2f9765705486b33fd2acf1577f8ec449c2ba1f318ae5447697b7c08d210"
 dependencies = [
  "fastrand 2.1.1",
  "futures-core",
@@ -1953,9 +1953,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41296eb09f183ac68eec06e03cdbea2e759633d4067b2f6552fc2e009bcad08b"
+checksum = "df2dcfbe0677734ab2f3ffa7fa7bfd4706bfdc1ef393f2ee30184aed67e631b4"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -2199,9 +2199,9 @@ dependencies = [
 
 [[package]]
 name = "libm"
-version = "0.2.8"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
+checksum = "8355be11b20d696c8f18f6cc018c4e372165b1fa8126cef092399c9951984ffa"
 
 [[package]]
 name = "libredox"
@@ -3218,7 +3218,7 @@ dependencies = [
  "concurrent-queue",
  "hermit-abi 0.4.0",
  "pin-project-lite",
- "rustix 0.38.37",
+ "rustix 0.38.38",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -3473,9 +3473,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.8"
+version = "0.12.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f713147fbe92361e52392c73b8c9e48c04c6625bce969ef54dc901e58e042a7b"
+checksum = "a77c62af46e79de0a562e1a9849205ffcb7fc1238876e9bd743357570e04046f"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3741,9 +3741,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.37"
+version = "0.38.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8acb788b847c24f28525660c4d7758620a7210875711f79e7f663cc152726811"
+checksum = "aa260229e6538e52293eeb577aabd09945a09d6d9cc0fc550ed7529056c2e32a"
 dependencies = [
  "bitflags 2.6.0",
  "errno",
@@ -3754,9 +3754,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.15"
+version = "0.23.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fbb44d7acc4e873d613422379f69f237a1b141928c02f6bc6ccfddddc2d7993"
+checksum = "eee87ff5d9b36712a58574e12e9f0ea80f915a5b0ac518d322b24a465617925e"
 dependencies = [
  "once_cell",
  "rustls-pki-types",
@@ -3891,9 +3891,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.213"
+version = "1.0.214"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ea7893ff5e2466df8d720bb615088341b295f849602c6956047f8f80f0e9bc1"
+checksum = "f55c3193aca71c12ad7890f1785d2b73e1b9f63a0bbc353c08ef26fe03fc56b5"
 dependencies = [
  "serde_derive",
 ]
@@ -3910,9 +3910,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.213"
+version = "1.0.214"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e85ad2009c50b58e87caa8cd6dac16bdf511bbfb7af6c33df902396aa480fa5"
+checksum = "de523f781f095e28fa605cdce0f8307e451cc0fd14e2eb4cd2e98a355b147766"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4634,7 +4634,7 @@ dependencies = [
  "cfg-if",
  "fastrand 2.1.1",
  "once_cell",
- "rustix 0.38.37",
+ "rustix 0.38.38",
  "windows-sys 0.59.0",
 ]
 
@@ -5228,7 +5228,7 @@ dependencies = [
  "either",
  "home",
  "once_cell",
- "rustix 0.38.37",
+ "rustix 0.38.38",
 ]
 
 [[package]]
@@ -5495,7 +5495,7 @@ checksum = "8da84f1a25939b27f6820d92aed108f83ff920fdf11a7b19366c27c4cda81d4f"
 dependencies = [
  "libc",
  "linux-raw-sys 0.4.14",
- "rustix 0.38.37",
+ "rustix 0.38.38",
 ]
 
 [[package]]

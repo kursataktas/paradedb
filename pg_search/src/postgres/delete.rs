@@ -19,7 +19,7 @@ use crate::index::directory::blocking::BlockingDirectory;
 use crate::index::directory::channel::{
     ChannelDirectory, ChannelRequest, ChannelRequestHandler, ChannelResponse,
 };
-use crate::index::reader::index::FFType;
+use crate::index::fast_fields_helper::FFType;
 use crate::index::WriterResources;
 use pgrx::{pg_sys::ItemPointerData, *};
 use tantivy::index::Index;
