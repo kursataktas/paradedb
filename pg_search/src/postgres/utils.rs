@@ -82,6 +82,7 @@ pub unsafe fn row_to_search_documents(
         Field,
     }
 
+    let ctid_index_value = item_pointer_to_u64(ctid);
     let (json_fields, other_fields): (Vec<_>, Vec<_>) = tupdesc
         .iter()
         .enumerate()
@@ -147,6 +148,7 @@ pub unsafe fn row_to_search_documents(
                 .iter()
                 .map(move |(field_id, field_value)| {
                     let mut document = schema.new_document();
+                    document.insert(schema.ctid_field().id, ctid_index_value.into());
                     document.insert(*field_id, field_value.clone());
                     (document, current_column_index)
                 })
@@ -166,12 +168,6 @@ pub unsafe fn row_to_search_documents(
     // If there were no JSON fields, make sure we have at least one document.
     if documents.is_empty() {
         documents.push(schema.new_document());
-    }
-
-    // Insert ctid values into all documents
-    for document in &mut documents {
-        let ctid_index_value = item_pointer_to_u64(ctid);
-        document.insert(schema.ctid_field().id, ctid_index_value.into())
     }
 
     // Insert non-JSON fields into all documents
