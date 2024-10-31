@@ -252,14 +252,14 @@ impl SearchIndexReader {
             .into_iter();
 
         let mut top_docs = Vec::with_capacity(results.len());
-        for (_ff_u64_value, doc_address) in results {
+        for (ff_u64_value, doc_address) in results {
             let segment_reader = self.searcher.segment_reader(doc_address.segment_ord);
             let ctid_ff = segment_reader
                 .fast_fields()
                 .u64("ctid")
                 .expect("ctid should be a fast field");
 
-            let scored = SearchIndexScore::new(&ctid_ff, doc_address.doc_id, 1.0);
+            let scored = SearchIndexScore::new(&ctid_ff, doc_address.doc_id, ff_u64_value);
             top_docs.push((scored, doc_address));
         }
 
