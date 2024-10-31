@@ -186,6 +186,7 @@ pub extern "C" fn ambuild(
             tokenizer: SearchTokenizer::Raw(SearchTokenizerFilters::default()),
             record: IndexRecordOption::Basic,
             normalizer: SearchNormalizer::Raw,
+            nested: true
         },
         SearchFieldType::Range => SearchFieldConfig::Range { stored: true },
         SearchFieldType::Bool => SearchFieldConfig::Boolean {

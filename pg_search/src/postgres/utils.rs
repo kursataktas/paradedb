@@ -15,15 +15,17 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use crate::index::IndexError;
-use crate::postgres::types::TantivyValue;
-use crate::schema::{SearchDocument, SearchIndexSchema};
+use crate::postgres::types::{JsonPath, TantivyValue};
+use crate::schema::{SearchDocument, SearchField, SearchFieldConfig, SearchIndexSchema};
 use anyhow::{anyhow, Result};
 use chrono::{NaiveDate, NaiveTime};
 use pgrx::itemptr::{item_pointer_get_both, item_pointer_set_all};
 use pgrx::*;
+use tantivy::schema::OwnedValue;
 
 /// Finds and returns the first `USING bm25` index on the specified relation, or [`None`] if there
 /// aren't any
@@ -83,6 +85,9 @@ pub unsafe fn row_to_search_documents(
     }
 
     let ctid_index_value = item_pointer_to_u64(ctid);
+
+    // JSON fields require special processing. If a JSON path is configured
+    // with 'nested', we need to make a new field for each member of nested arrays.
     let (json_fields, other_fields): (Vec<_>, Vec<_>) = tupdesc
         .iter()
         .enumerate()
@@ -108,91 +113,101 @@ pub unsafe fn row_to_search_documents(
                 PgOid::BuiltIn(pg_sys::BuiltinOid::JSONBOID | pg_sys::BuiltinOid::JSONOID)
             );
 
-            let datum = *values.add(attno);
+            let is_nested = matches!(
+                search_field.config,
+                SearchFieldConfig::Json { nested: true, .. }
+            );
+
+            if is_nested && !is_json {
+                panic!(
+                    "search field {} configured as 'nested', but it is not a JSON field",
+                    search_field.name
+                );
+            }
+
+            // Nested json fields don't correspond to an actual Postgres column, so we
+            // won't try and look up datums with the field name.
+            let datum = if is_nested {
+                None
+            } else {
+                Some(*values.add(attno))
+            };
 
             if is_array {
-                (MergeStrategy::Array, search_field.id, datum, base_oid)
+                (MergeStrategy::Array, search_field, datum, base_oid)
             } else if is_json {
-                (MergeStrategy::Json, search_field.id, datum, base_oid)
+                (MergeStrategy::Json, search_field, datum, base_oid)
             } else {
-                (MergeStrategy::Field, search_field.id, datum, base_oid)
+                (MergeStrategy::Field, search_field, datum, base_oid)
             }
         })
         .partition(|(strategy, _, _, _)| matches!(strategy, MergeStrategy::Json));
 
     if !other_fields
         .iter() // Check if key field was filtered out for being null.
-        .any(|(_, id, _, _)| id == &schema.key_field().id)
+        .any(|(_, search_field, _, _)| &search_field.id == &schema.key_field().id)
     {
         return Err(IndexError::KeyIdNull);
     }
 
-    let json_tantivy_values_for_columns = json_fields
-        .into_iter()
-        .map(|(_, field_id, datum, base_oid)| {
-            match TantivyValue::try_from_datum_json(datum, base_oid) {
-                Ok(iter) => iter
-                    .into_iter()
-                    .map(|value| (field_id, value.tantivy_schema_value()))
-                    .collect(),
-                Err(err) => panic!("error processing json data: {err}"),
-            }
-        })
-        .collect::<Vec<Vec<_>>>();
-
-    let mut documents: Vec<SearchDocument> = json_tantivy_values_for_columns
+    let json_field_lookup: HashMap<JsonPath, &SearchField> = json_fields
         .iter()
-        .enumerate()
-        .flat_map(|(current_column_index, json_values_for_column)| {
-            json_values_for_column
-                .iter()
-                .map(move |(field_id, field_value)| {
-                    let mut document = schema.new_document();
-                    document.insert(schema.ctid_field().id, ctid_index_value.into());
-                    document.insert(*field_id, field_value.clone());
-                    (document, current_column_index)
-                })
-        })
-        .map(|(mut document, skip_index)| {
-            for (index, column_json_values) in json_tantivy_values_for_columns.iter().enumerate() {
-                if index != skip_index {
-                    for (other_field_id, other_field_value) in column_json_values {
-                        document.insert(*other_field_id, other_field_value.clone());
-                    }
-                }
-            }
-            document
-        })
+        .map(|(_, f, _, _)| (JsonPath::from(f.name.0.as_ref()), *f))
         .collect();
 
-    // If there were no JSON fields, make sure we have at least one document.
-    if documents.is_empty() {
-        documents.push(schema.new_document());
-    }
+    let nested_lookup: HashSet<&JsonPath> = json_field_lookup
+        .iter()
+        .filter(|(_, f)| matches!(f.config, SearchFieldConfig::Json { nested: true, .. }))
+        .map(|(path, _)| path)
+        .collect();
 
-    // Insert non-JSON fields into all documents
-    for (strategy, field_id, datum, base_oid) in other_fields {
-        match strategy {
-            MergeStrategy::Array => {
-                let datum_values = TantivyValue::try_from_datum_array(datum, base_oid)
-                    .unwrap_or_else(|err| panic!("could not read array datum: {err}"));
-                for value in datum_values {
-                    for document in &mut documents {
-                        document.insert(field_id, value.tantivy_schema_value());
-                    }
-                }
-            }
-            _ => {
-                let value = TantivyValue::try_from_datum(datum, base_oid)
-                    .unwrap_or_else(|err| panic!("could not read datum: {err}"));
-                for document in &mut documents {
-                    document.insert(field_id, value.tantivy_schema_value());
-                }
+    let mut document = schema.new_document(ctid_index_value);
+    for (_, search_field, datum, base_oid) in json_fields {
+        let path = JsonPath::from(search_field.name.0.as_ref());
+        // JSON nested fields won't have datums.
+        if let Some(datum) = datum {
+            for (path, value) in
+                TantivyValue::try_from_datum_json(&nested_lookup, path, datum, base_oid)
+                    .expect("must be able to retrieve json values from datum")
+            {
+                let parent = path.parent();
+                let key = path.key;
+                let is_nested = nested_lookup.contains(&parent);
+
+                let search_field = if is_nested {
+                    json_field_lookup
+                        .get(&parent)
+                        .expect("search field should exist for json path")
+                } else {
+                    search_field
+                };
+
+                document.insert(search_field.id, OwnedValue::Object(vec![(key, value.0)]))
             }
         }
     }
 
-    Ok(documents)
+    // Insert non-JSON fields into all documents
+    for (strategy, search_field, datum, base_oid) in other_fields {
+        match strategy {
+            MergeStrategy::Array => {
+                let datum = datum.expect("non-nested JSON field should have an associated datum");
+                let datum_values = TantivyValue::try_from_datum_array(datum, base_oid)
+                    .unwrap_or_else(|err| panic!("could not read array datum: {err}"));
+                for value in datum_values {
+                    document.insert(search_field.id, value.tantivy_schema_value());
+                }
+            }
+            _ => {
+                let datum = datum.expect("non-nested JSON field should have an associated datum");
+                let value = TantivyValue::try_from_datum(datum, base_oid)
+                    .unwrap_or_else(|err| panic!("could not read datum: {err}"));
+                document.insert(search_field.id, value.tantivy_schema_value());
+            }
+        }
+    }
+
+    Ok(vec![document])
 }
 
 /// Utility function for easy `f64` to `u32` conversion

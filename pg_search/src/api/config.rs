@@ -30,6 +30,7 @@ pub fn field(
     expand_dots: default!(Option<bool>, "NULL"),
     tokenizer: default!(Option<JsonB>, "NULL"),
     normalizer: default!(Option<String>, "NULL"),
+    nested: default!(Option<bool>, "NULL"),
 ) -> JsonB {
     let mut config = Map::new();
 
@@ -41,6 +42,7 @@ pub fn field(
     expand_dots.map(|v| config.insert("expand_dots".to_string(), Value::Bool(v)));
     tokenizer.map(|v| config.insert("tokenizer".to_string(), v.0));
     normalizer.map(|v| config.insert("normalizer".to_string(), Value::String(v)));
+    nested.map(|v| config.insert("nested".to_string(), Value::Bool(v)));
 
     JsonB(json!({ name: config }))
 }
@@ -93,7 +95,8 @@ mod tests {
                 "record": "position",
                 "expand_dots": true,
                 "tokenizer": {"type": "ngram", "min_gram": 4, "max_gram": 4, "prefix_only": false, "stemmer": "English"},
-                "normalizer": "lowercase"
+                "normalizer": "lowercase",
+                "nested": false
             }
         });
 
@@ -117,6 +120,7 @@ mod tests {
                 Some("English".to_string()),
             )),
             Some("lowercase".to_string()),
+            Some(false),
         );
 
         assert_eq!(expected, actual);

@@ -39,7 +39,7 @@ pub fn simple_schema(
 
 #[fixture]
 pub fn simple_doc(simple_schema: SearchIndexSchema) -> SearchDocument {
-    let mut search_document = simple_schema.new_document();
+    let mut search_document = simple_schema.new_document(0);
 
     let ids: Vec<_> = simple_schema.fields.into_iter().map(|f| f.id).collect();
 

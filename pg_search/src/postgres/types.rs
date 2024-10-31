@@ -28,6 +28,7 @@ use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::num::ParseFloatError;
@@ -90,23 +91,24 @@ impl TantivyValue {
         }
     }
 
-    fn json_value_to_tantivy_values(value: Value) -> JsonValueIter {
-        // A tantivy JSON value can't be a top-level array, so we have to make
-        // separate values out of each entry.
+    fn json_value_to_tantivy_values<'a>(
+        is_nested: &'a HashSet<&JsonPath>,
+        path: JsonPath,
+        value: Value,
+    ) -> Box<dyn Iterator<Item = (JsonPath, TantivyValue)> + 'a> {
         if let Value::Array(value_vec) = value {
-            JsonValueIter::Many(
-                value_vec
-                    .into_iter()
-                    .flat_map(|v| match Self::json_value_to_tantivy_values(v) {
-                        JsonValueIter::Many(i) => i.collect::<Vec<_>>().into_iter(),
-                        JsonValueIter::One(i) => vec![i.into_iter().next().unwrap()].into_iter(),
-                    })
-                    .collect::<Vec<_>>()
-                    .into_iter(),
-            )
+            Box::new(value_vec.into_iter().enumerate().flat_map(move |(idx, v)| {
+                let path = if is_nested.contains(&path) {
+                    path.child(idx)
+                } else {
+                    path.clone()
+                };
+                Self::json_value_to_tantivy_values(is_nested, path, v)
+            }))
         } else {
-            JsonValueIter::One(std::iter::once(TantivyValue(
-                tantivy::schema::OwnedValue::from(value),
+            Box::new(std::iter::once((
+                path,
+                TantivyValue(tantivy::schema::OwnedValue::from(value)),
             )))
         }
     }
@@ -147,10 +149,12 @@ impl TantivyValue {
         }
     }
 
-    pub unsafe fn try_from_datum_json(
+    pub unsafe fn try_from_datum_json<'a>(
+        is_nested: &HashSet<&JsonPath>,
+        path: JsonPath,
         datum: Datum,
         oid: PgOid,
-    ) -> Result<Vec<Self>, TantivyValueError> {
+    ) -> Result<Vec<(JsonPath, Self)>, TantivyValueError> {
         match &oid {
             PgOid::BuiltIn(builtin) => match builtin {
                 // Tantivy has a limitation that prevents JSON top-level arrays from being
@@ -161,14 +165,14 @@ impl TantivyValue {
                         .ok_or(TantivyValueError::DatumDeref)?;
                     let json_value: Value =
                         serde_json::from_slice(&serde_json::to_vec(&pgrx_value.0)?)?;
-                    Ok(Self::json_value_to_tantivy_values(json_value).collect())
+                    Ok(Self::json_value_to_tantivy_values(is_nested, path, json_value).collect())
                 }
                 PgBuiltInOids::JSONOID => {
                     let pgrx_value = pgrx::Json::from_datum(datum, false)
                         .ok_or(TantivyValueError::DatumDeref)?;
                     let json_value: Value =
                         serde_json::from_slice(&serde_json::to_vec(&pgrx_value.0)?)?;
-                    Ok(Self::json_value_to_tantivy_values(json_value).collect())
+                    Ok(Self::json_value_to_tantivy_values(is_nested, path, json_value).collect())
                 }
                 _ => Err(TantivyValueError::UnsupportedJsonOid(oid.value())),
             },
@@ -995,18 +999,38 @@ pub enum TantivyValueError {
     UnsupportedIntoConversion(String),
 }
 
-enum JsonValueIter {
-    Many(std::vec::IntoIter<TantivyValue>),
-    One(std::iter::Once<TantivyValue>),
+#[derive(Clone, Hash, Eq, PartialEq)]
+pub struct JsonPath {
+    pub path: Vec<String>,
+    pub key: String,
 }
 
-impl Iterator for JsonValueIter {
-    type Item = TantivyValue;
+impl JsonPath {
+    pub fn parent(&self) -> Self {
+        Self::from(self.path.clone())
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            JsonValueIter::Many(iter) => iter.next(),
-            JsonValueIter::One(iter) => iter.next(),
+    pub fn child<T: ToString>(&self, key: T) -> Self {
+        let mut path = self.path.clone();
+        path.push(self.key.clone());
+        Self {
+            path,
+            key: key.to_string(),
         }
+    }
+}
+
+impl From<Vec<String>> for JsonPath {
+    fn from(value: Vec<String>) -> Self {
+        let mut path = value.clone();
+        let key = path.pop().expect("JsonPath string must not be empty");
+        Self { path, key }
+    }
+}
+
+impl From<&str> for JsonPath {
+    fn from(value: &str) -> Self {
+        let path = value.split('.').map(|s| s.to_string()).collect::<Vec<_>>();
+        Self::from(path)
     }
 }

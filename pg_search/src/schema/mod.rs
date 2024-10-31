@@ -129,6 +129,8 @@ pub enum SearchFieldConfig {
         record: IndexRecordOption,
         #[serde(default)]
         normalizer: SearchNormalizer,
+        #[serde(default)]
+        nested: bool,
     },
     Range {
         #[serde(default = "default_as_true")]
@@ -269,6 +271,13 @@ impl SearchFieldConfig {
             None => Ok(SearchNormalizer::Raw),
         }?;
 
+        let nested = match obj.get("nested") {
+            Some(v) => v
+                .as_bool()
+                .ok_or_else(|| anyhow::anyhow!("'nested' field should be a boolean")),
+            None => Ok(false),
+        }?;
+
         Ok(SearchFieldConfig::Json {
             indexed,
             fast,
@@ -277,6 +286,7 @@ impl SearchFieldConfig {
             tokenizer,
             record,
             normalizer,
+            nested,
         })
     }
 
@@ -499,6 +509,7 @@ impl From<SearchFieldConfig> for JsonObjectOptions {
                 tokenizer,
                 record,
                 normalizer,
+                ..
             } => {
                 if stored {
                     json_options = json_options.set_stored();
@@ -680,10 +691,10 @@ impl SearchIndexSchema {
     }
 
     #[inline(always)]
-    pub fn new_document(&self) -> SearchDocument {
-        SearchDocument {
-            doc: tantivy::TantivyDocument::new(),
-        }
+    pub fn new_document(&self, ctid: u64) -> SearchDocument {
+        let mut doc = tantivy::TantivyDocument::new();
+        doc.add_field_value(self.ctid_field().id.0, &ctid);
+        SearchDocument { doc }
     }
 
     pub fn get_search_field(&self, name: &SearchFieldName) -> Option<&SearchField> {
