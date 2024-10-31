@@ -35,8 +35,9 @@ pub fn open_search_index(
     let (fields, key_field_index) = unsafe { get_fields(index_relation) };
     let schema = SearchIndexSchema::new(fields, key_field_index)?;
     let tantivy_dir = BlockingDirectory::new(index_oid.into());
-    let underlying_index = Index::open(tantivy_dir)?;
+    let mut underlying_index = Index::open(tantivy_dir)?;
 
+    SearchIndex::setup_tokenizers(&mut underlying_index, &schema);
     Ok(SearchIndex {
         schema,
         underlying_index,

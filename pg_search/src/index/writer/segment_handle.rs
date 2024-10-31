@@ -34,7 +34,7 @@ impl Write for SegmentHandleWriter {
     // error. Typically, a call to `write` represents one attempt to write to
     // any wrapped object.
     fn write(&mut self, data: &[u8]) -> Result<usize> {
-        self.data.write_all(data)?;
+        self.data.get_mut().extend_from_slice(data);
         Ok(data.len())
     }
 
@@ -42,10 +42,11 @@ impl Write for SegmentHandleWriter {
         unsafe {
             const MAX_HEAP_TUPLE_SIZE: usize = unsafe { max_heap_tuple_size() };
             let cache = BufferCache::open(self.relation_oid);
+            let remaining = self.data.get_ref().len() - self.data.position() as usize;
 
-            if self.data.get_ref().len() >= MAX_HEAP_TUPLE_SIZE {
+            if remaining >= MAX_HEAP_TUPLE_SIZE {
                 let mut sink = [0; MAX_HEAP_TUPLE_SIZE];
-                self.data.seek(std::io::SeekFrom::Start(0))?;
+                // self.data.seek(std::io::SeekFrom::Start(0))?;
                 while let Ok(bytes_read) = self.data.read(&mut sink) {
                     if bytes_read == 0 {
                         break;
@@ -74,7 +75,8 @@ impl Write for SegmentHandleWriter {
                     pg_sys::MarkBufferDirty(buffer);
                     pg_sys::UnlockReleaseBuffer(buffer);
 
-                    if self.data.get_ref().len() < MAX_HEAP_TUPLE_SIZE {
+                    let remaining = self.data.get_ref().len() - self.data.position() as usize;
+                    if remaining < MAX_HEAP_TUPLE_SIZE {
                         break;
                     }
                 }
@@ -91,7 +93,6 @@ impl TerminatingWrite for SegmentHandleWriter {
             const MAX_HEAP_TUPLE_SIZE: usize = unsafe { max_heap_tuple_size() };
             let mut sink = [0; MAX_HEAP_TUPLE_SIZE];
             let cache = BufferCache::open(self.relation_oid);
-            self.data.seek(std::io::SeekFrom::Start(0))?;
 
             while let Ok(bytes_read) = self.data.read(&mut sink) {
                 if bytes_read == 0 {

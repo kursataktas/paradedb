@@ -1,4 +1,4 @@
-use crate::postgres::buffer::{BufferCache, SEARCH_META_BLOCKNO};
+use crate::postgres::buffer::{BufferCache, SEGMENT_HANDLE_BLOCKNO};
 use anyhow::Result;
 use pgrx::*;
 use serde::{Deserialize, Serialize};
@@ -9,11 +9,7 @@ use std::slice::from_raw_parts;
 
 pub(crate) struct SegmentHandleSpecialData {
     // If the metadata block overflows, the next block to write to
-    pub next_blockno: pg_sys::BlockNumber,
-    // The block number that stores .meta.json
-    pub meta_blockno: pg_sys::BlockNumber,
-    // The block number that stores .managed.json
-    pub managed_blockno: pg_sys::BlockNumber,
+    pub insert_blockno: pg_sys::BlockNumber,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -26,7 +22,7 @@ pub(crate) struct SegmentHandle {
 impl SegmentHandle {
     pub unsafe fn open(relation_oid: u32, path: &Path) -> Result<Option<Self>> {
         let cache = BufferCache::open(relation_oid);
-        let buffer = cache.get_buffer(SEARCH_META_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
+        let buffer = cache.get_buffer(SEGMENT_HANDLE_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
         let page = pg_sys::BufferGetPage(buffer);
 
         let mut offsetno = pg_sys::FirstOffsetNumber;
@@ -57,13 +53,13 @@ impl SegmentHandle {
         total_bytes: usize,
     ) {
         let cache = BufferCache::open(relation_oid);
-        let mut buffer = cache.get_buffer(SEARCH_META_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
+        let mut buffer = cache.get_buffer(SEGMENT_HANDLE_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
         let mut page = pg_sys::BufferGetPage(buffer);
         let special = pg_sys::PageGetSpecialPointer(page) as *mut SegmentHandleSpecialData;
 
         if pg_sys::PageGetFreeSpace(page) < size_of::<SegmentHandle>() {
             let new_buffer = cache.new_buffer(size_of::<SegmentHandle>());
-            (*special).next_blockno = pg_sys::BufferGetBlockNumber(new_buffer);
+            (*special).insert_blockno = pg_sys::BufferGetBlockNumber(new_buffer);
             pg_sys::MarkBufferDirty(buffer);
             buffer = new_buffer;
             page = pg_sys::BufferGetPage(buffer);

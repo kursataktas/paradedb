@@ -1,5 +1,5 @@
 use crate::index::segment_handle::SegmentHandleSpecialData;
-use crate::postgres::buffer::{BufferCache, SEARCH_META_BLOCKNO};
+use crate::postgres::buffer::{BufferCache, MANAGED_BLOCKNO, META_BLOCKNO};
 use pgrx::*;
 
 pub(crate) struct AtomicSpecialData {
@@ -9,43 +9,28 @@ pub(crate) struct AtomicSpecialData {
 // Handles Tantivy's atomic_read and atomic_write over block storage
 #[derive(Clone, Debug)]
 pub struct AtomicDirectory {
-    pub meta_blockno: pg_sys::BlockNumber,
-    pub managed_blockno: pg_sys::BlockNumber,
     relation_oid: u32,
 }
 
 impl AtomicDirectory {
     pub unsafe fn new(relation_oid: u32) -> Self {
-        let cache = BufferCache::open(relation_oid);
-        let buffer = cache.get_buffer(SEARCH_META_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
-        let page = pg_sys::BufferGetPage(buffer);
-        let special = pg_sys::PageGetSpecialPointer(page) as *mut SegmentHandleSpecialData;
-        let meta_blockno = (*special).meta_blockno;
-        let managed_blockno = (*special).managed_blockno;
-
-        pg_sys::UnlockReleaseBuffer(buffer);
-
-        Self {
-            meta_blockno,
-            managed_blockno,
-            relation_oid,
-        }
+        Self { relation_oid }
     }
 
     pub unsafe fn read_meta(&self) -> Vec<u8> {
-        self.read_bytes(self.meta_blockno)
+        self.read_bytes(META_BLOCKNO)
     }
 
     pub unsafe fn read_managed(&self) -> Vec<u8> {
-        self.read_bytes(self.managed_blockno)
+        self.read_bytes(MANAGED_BLOCKNO)
     }
 
     pub unsafe fn write_meta(&self, data: &[u8]) {
-        self.write_bytes(data, self.meta_blockno);
+        self.write_bytes(data, META_BLOCKNO);
     }
 
     pub unsafe fn write_managed(&self, data: &[u8]) {
-        self.write_bytes(data, self.managed_blockno);
+        self.write_bytes(data, MANAGED_BLOCKNO);
     }
 
     // TODO: Handle read_bytes and write_bytes where data is larger than a page

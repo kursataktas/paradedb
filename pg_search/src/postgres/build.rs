@@ -18,7 +18,9 @@
 use crate::index::directory::atomic::AtomicSpecialData;
 use crate::index::segment_handle::SegmentHandleSpecialData;
 use crate::index::{SearchIndex, WriterResources};
-use crate::postgres::buffer::{BufferCache, SEARCH_META_BLOCKNO};
+use crate::postgres::buffer::{
+    BufferCache, INDEX_WRITER_LOCK_BLOCKNO, MANAGED_BLOCKNO, META_BLOCKNO, SEGMENT_HANDLE_BLOCKNO,
+};
 use crate::postgres::index::get_fields;
 use crate::postgres::insert::init_insert_state;
 use crate::postgres::utils::row_to_search_document;
@@ -205,21 +207,18 @@ fn is_bm25_index(indexrel: &PgRelation) -> bool {
 unsafe fn create_metadata(relation_oid: u32) {
     let cache = BufferCache::open(relation_oid);
     let buffer = cache.new_buffer(std::mem::size_of::<SegmentHandleSpecialData>());
-    assert!(
-        pg_sys::BufferGetBlockNumber(buffer) == SEARCH_META_BLOCKNO,
-        "expected metadata blockno to be 0 but got {SEARCH_META_BLOCKNO}"
-    );
-
     let page = pg_sys::BufferGetPage(buffer);
     let special = pg_sys::PageGetSpecialPointer(page) as *mut SegmentHandleSpecialData;
+    (*special).insert_blockno = SEGMENT_HANDLE_BLOCKNO;
 
     let lock_buffer = cache.new_buffer(0);
     let meta_buffer = cache.new_buffer(std::mem::size_of::<AtomicSpecialData>());
     let managed_buffer = cache.new_buffer(std::mem::size_of::<AtomicSpecialData>());
 
-    (*special).meta_blockno = pg_sys::BufferGetBlockNumber(meta_buffer);
-    (*special).managed_blockno = pg_sys::BufferGetBlockNumber(managed_buffer);
-    (*special).next_blockno = pg_sys::InvalidBlockNumber;
+    assert!(pg_sys::BufferGetBlockNumber(buffer) == SEGMENT_HANDLE_BLOCKNO);
+    assert!(pg_sys::BufferGetBlockNumber(lock_buffer) == INDEX_WRITER_LOCK_BLOCKNO);
+    assert!(pg_sys::BufferGetBlockNumber(meta_buffer) == META_BLOCKNO);
+    assert!(pg_sys::BufferGetBlockNumber(managed_buffer) == MANAGED_BLOCKNO);
 
     pg_sys::MarkBufferDirty(buffer);
     pg_sys::MarkBufferDirty(lock_buffer);

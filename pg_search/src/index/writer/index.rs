@@ -111,7 +111,6 @@ impl SearchIndexWriter {
         let mut underlying_index = Index::create(tantivy_dir, schema.schema.clone(), settings)?;
 
         SearchIndex::setup_tokenizers(&mut underlying_index, &schema);
-
         Ok(SearchIndex {
             index_oid,
             underlying_index,
