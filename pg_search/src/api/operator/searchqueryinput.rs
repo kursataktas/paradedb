@@ -14,8 +14,13 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
+use super::{
+    anyelement_query_input_opoid, anyelement_query_input_procoid,
+    make_search_query_input_opexpr_node,
+};
 use crate::api::operator::{estimate_selectivity, find_var_relation, ReturnedNodePointer};
 use crate::gucs::per_tuple_cost;
+use crate::index::fast_fields_helper::FFHelper;
 use crate::index::SearchIndex;
 use crate::postgres::index::open_search_index;
 use crate::postgres::types::TantivyValue;
@@ -28,11 +33,6 @@ use pgrx::{
 };
 use rustc_hash::FxHashSet;
 use std::ptr::NonNull;
-
-use super::{
-    anyelement_query_input_opoid, anyelement_query_input_procoid,
-    make_search_query_input_opexpr_node,
-};
 
 #[pg_extern(immutable, parallel_safe, cost = 1000000000)]
 pub fn search_with_query_input(
@@ -50,25 +50,36 @@ pub fn search_with_query_input(
                 _ => panic!("the SeachQueryInput must be wrapped in a WithIndex variant"),
             }
         };
-        let search_index = open_search_index(unsafe {
+        let indexrel = unsafe {
             &PgRelation::with_lock(index_oid, pg_sys::AccessShareLock as pg_sys::LOCKMODE)
-        })
-        .expect("should be able to open search index");
+        };
+        let search_index =
+            open_search_index(indexrel).expect("should be able to open search index");
 
-        let scan_state = search_index.get_reader().unwrap();
-        let top_docs = scan_state.search_via_channel(
+        let key_field = search_index.key_field_name();
+        let key_field_type = search_index.key_field().type_.into();
+        let search_reader = search_index.get_reader().unwrap();
+        let fast_fields = FFHelper::with_fields(
+            &search_reader,
+            &[(key_field.clone(), key_field_type).into()],
+        );
+        let top_docs = search_reader.search_via_channel(
             query.contains_more_like_this(),
-            Some(search_index.key_field_name()),
+            false,
             SearchIndex::executor(),
-            &search_index.query(&query, &scan_state),
+            &search_index.query(indexrel, &query, &search_reader),
         );
         let mut hs = FxHashSet::default();
-        for (scored, _) in top_docs {
+        for (_, doc_address) in top_docs {
             check_for_interrupts!();
-            hs.insert(scored.key.expect("key should have been retrieved"));
+            hs.insert(
+                fast_fields
+                    .value(0, doc_address)
+                    .expect("key_field value should not be null"),
+            );
         }
 
-        (search_index.key_field(), hs)
+        (key_field, hs)
     };
 
     let cached = unsafe { pg_func_extra(fcinfo, default_hash_set) };
@@ -80,7 +91,7 @@ pub fn search_with_query_input(
     } {
         Err(err) => panic!(
             "no value present in key_field {} in tuple: {err}",
-            key_field.name
+            key_field
         ),
         Ok(value) => value,
     };

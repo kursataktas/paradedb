@@ -21,7 +21,7 @@ pub mod range;
 use anyhow::{Context, Result};
 use derive_more::{AsRef, Display, From, Into};
 pub use document::*;
-use pgrx::{PgBuiltInOids, PgOid};
+use pgrx::{PgBuiltInOids, PgOid, PgRelation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
@@ -675,6 +675,10 @@ impl SearchIndexSchema {
             .clone()
     }
 
+    pub fn is_key_field(&self, name: &str) -> bool {
+        self.key_field().name.0 == name
+    }
+
     #[inline(always)]
     pub fn new_document(&self) -> SearchDocument {
         SearchDocument {
@@ -699,6 +703,24 @@ impl SearchIndexSchema {
     pub fn is_field_lower_sortable(&self, name: &str) -> bool {
         self.is_field_sortable(name, SearchNormalizer::Lowercase)
             .is_some()
+    }
+
+    pub fn is_fast_field(&self, name: &str) -> bool {
+        self.is_field_raw_sortable(name)
+    }
+
+    pub fn is_numeric_fast_field(&self, name: &str) -> bool {
+        if let Some(search_field) = self.get_search_field(&SearchFieldName(name.to_string())) {
+            matches!(
+                search_field.config,
+                SearchFieldConfig::Numeric { fast: true, .. }
+                    | SearchFieldConfig::Boolean { fast: true, .. }
+                    | SearchFieldConfig::Date { fast: true, .. }
+                    | SearchFieldConfig::Ctid
+            )
+        } else {
+            false
+        }
     }
 
     fn is_field_sortable(&self, name: &str, desired_normalizer: SearchNormalizer) -> Option<()> {
@@ -784,30 +806,75 @@ fn default_as_freqs_and_positions() -> IndexRecordOption {
     IndexRecordOption(tantivy::schema::IndexRecordOption::WithFreqsAndPositions)
 }
 
-impl AsFieldType<String> for SearchIndexSchema {
-    fn key_field(&self) -> (tantivy::schema::FieldType, Field) {
-        let search_field = self.key_field();
+trait AsTypeOid {
+    fn typeoid(&self, field: &SearchField) -> PgOid;
+}
+
+impl AsTypeOid for (&PgRelation, &SearchIndexSchema) {
+    fn typeoid(&self, search_field: &SearchField) -> PgOid {
+        if search_field.name.0 == "ctid" {
+            return PgOid::BuiltIn(pgrx::pg_sys::BuiltinOid::TIDOID);
+        }
+        let indexrel = self.0;
+        for attribute in indexrel.tuple_desc().iter() {
+            let attname = attribute.name().to_string();
+            let typeoid = attribute.type_oid();
+            if search_field.name.0 == attname {
+                return typeoid;
+            }
+        }
+        panic!(
+            "search field {} not found in index '{}' with oid: {}",
+            search_field.name.0,
+            indexrel.name(),
+            indexrel.oid().as_u32()
+        );
+    }
+}
+
+impl AsTypeOid for HashMap<String, PgOid> {
+    fn typeoid(&self, search_field: &SearchField) -> PgOid {
+        if search_field.name.0 == "ctid" {
+            return PgOid::BuiltIn(pgrx::pg_sys::BuiltinOid::TIDOID);
+        }
+        self.get(&search_field.name.0)
+            .copied()
+            .unwrap_or_else(|| panic!("search field {} not found in index", search_field.name.0))
+    }
+}
+
+impl AsFieldType<String> for (&PgRelation, &SearchIndexSchema) {
+    fn key_field(&self) -> (tantivy::schema::FieldType, PgOid, Field) {
+        let search_field = self.1.key_field();
         let field = search_field.id.0;
-        let field_type = self.schema.get_field_entry(field).field_type().clone();
-        (field_type, field)
+        let field_type = self.1.schema.get_field_entry(field).field_type().clone();
+        (field_type, self.typeoid(&search_field), field)
     }
 
-    fn fields(&self) -> Vec<(tantivy::schema::FieldType, Field)> {
-        self.fields
+    fn fields(&self) -> Vec<(tantivy::schema::FieldType, PgOid, Field)> {
+        let indexrel = self.0;
+        let typeoid_lookup: HashMap<String, PgOid> = indexrel
+            .tuple_desc()
+            .iter()
+            .map(|attribute| (attribute.name().to_string(), attribute.type_oid()))
+            .collect();
+        self.1
+            .fields
             .iter()
             .map(|search_field| {
                 let field = search_field.id.0;
-                let field_type = self.schema.get_field_entry(field).field_type().clone();
-                (field_type, field)
+                let field_type = self.1.schema.get_field_entry(field).field_type().clone();
+                (field_type, typeoid_lookup.typeoid(search_field), field)
             })
             .collect()
     }
-    fn as_field_type(&self, from: &String) -> Option<(tantivy::schema::FieldType, Field)> {
-        self.get_search_field(&SearchFieldName(from.into()))
+    fn as_field_type(&self, from: &String) -> Option<(tantivy::schema::FieldType, PgOid, Field)> {
+        self.1
+            .get_search_field(&SearchFieldName(from.into()))
             .map(|search_field| {
                 let field = search_field.id.0;
-                let field_type = self.schema.get_field_entry(field).field_type().clone();
-                (field_type, field)
+                let field_type = self.1.schema.get_field_entry(field).field_type().clone();
+                (field_type, self.typeoid(search_field), field)
             })
     }
 }
