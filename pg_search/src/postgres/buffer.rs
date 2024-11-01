@@ -1,15 +1,11 @@
 use pgrx::*;
 use std::ptr::null_mut;
 
-/// The first block of the index is the metadata block, which is essentially a map for how the rest of the blocks are organized.
-/// It is our responsibility to ensure that the metadata block is the first block by creating it immediately when the index is built.
-pub const SEGMENT_HANDLE_BLOCKNO: pg_sys::BlockNumber = 0;
-/// The second block is used for Tantivy's INDEX_WRITER_LOCK
-pub const INDEX_WRITER_LOCK_BLOCKNO: pg_sys::BlockNumber = 1;
-/// The third block is used for Tantivy's meta.json
-pub const META_BLOCKNO: pg_sys::BlockNumber = 2;
-/// The fourth block is used for Tantivy's managed.json
-pub const MANAGED_BLOCKNO: pg_sys::BlockNumber = 3;
+pub const METADATA_BLOCKNO: pg_sys::BlockNumber = 0; // Stores metadata for the entire index
+pub const SEGMENT_HANDLE_BLOCKNO: pg_sys::BlockNumber = 1; // Stores SegmentHandles
+pub const INDEX_WRITER_LOCK_BLOCKNO: pg_sys::BlockNumber = 2; // Used for Tantivy's INDEX_WRITER_LOCK
+pub const TANTIVY_META_BLOCKNO: pg_sys::BlockNumber = 3; // Used for Tantivy's meta.json
+pub const TANTIVY_MANAGED_BLOCKNO: pg_sys::BlockNumber = 4; // Used for Tantivy's managed.json
 
 // Reads and writes buffers from the buffer cache for a pg_sys::Relation
 #[derive(Clone, Debug)]

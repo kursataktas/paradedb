@@ -15,11 +15,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::directory::atomic::AtomicSpecialData;
-use crate::index::segment_handle::SegmentHandleSpecialData;
 use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::buffer::{
-    BufferCache, INDEX_WRITER_LOCK_BLOCKNO, MANAGED_BLOCKNO, META_BLOCKNO, SEGMENT_HANDLE_BLOCKNO,
+    BufferCache, INDEX_WRITER_LOCK_BLOCKNO, SEGMENT_HANDLE_BLOCKNO, TANTIVY_MANAGED_BLOCKNO,
+    TANTIVY_META_BLOCKNO,
 };
 use crate::postgres::index::get_fields;
 use crate::postgres::insert::init_insert_state;
@@ -204,28 +203,44 @@ fn is_bm25_index(indexrel: &PgRelation) -> bool {
     }
 }
 
+struct MetaPageData {
+    segment_handle_insert_blockno: pg_sys::BlockNumber,
+}
+
+struct LinkedBlockSpecialData {
+    next_blockno: pg_sys::BlockNumber,
+}
+
 unsafe fn create_metadata(relation_oid: u32) {
     let cache = BufferCache::open(relation_oid);
-    let buffer = cache.new_buffer(std::mem::size_of::<SegmentHandleSpecialData>());
-    let page = pg_sys::BufferGetPage(buffer);
-    let special = pg_sys::PageGetSpecialPointer(page) as *mut SegmentHandleSpecialData;
-    (*special).insert_blockno = SEGMENT_HANDLE_BLOCKNO;
+    let metadata_buffer = cache.new_buffer(0);
+    let page = pg_sys::BufferGetPage(metadata_buffer);
+    let data = pg_sys::PageGetContents(page) as *mut MetaPageData;
+    (*data).segment_handle_insert_blockno = SEGMENT_HANDLE_BLOCKNO;
+
+    let segment_handle_buffer = cache.new_buffer(std::mem::size_of::<LinkedBlockSpecialData>());
+    let page = pg_sys::BufferGetPage(segment_handle_buffer);
+    let special = pg_sys::PageGetSpecialPointer(page) as *mut LinkedBlockSpecialData;
+    (*special).next_blockno = pg_sys::InvalidBlockNumber;
 
     let lock_buffer = cache.new_buffer(0);
-    let meta_buffer = cache.new_buffer(std::mem::size_of::<AtomicSpecialData>());
-    let managed_buffer = cache.new_buffer(std::mem::size_of::<AtomicSpecialData>());
+    let tantivy_meta_buffer = cache.new_buffer(std::mem::size_of::<LinkedBlockSpecialData>());
+    let tantivy_managed_buffer = cache.new_buffer(std::mem::size_of::<LinkedBlockSpecialData>());
 
-    assert!(pg_sys::BufferGetBlockNumber(buffer) == SEGMENT_HANDLE_BLOCKNO);
+    assert!(pg_sys::BufferGetBlockNumber(segment_handle_buffer) == SEGMENT_HANDLE_BLOCKNO);
     assert!(pg_sys::BufferGetBlockNumber(lock_buffer) == INDEX_WRITER_LOCK_BLOCKNO);
-    assert!(pg_sys::BufferGetBlockNumber(meta_buffer) == META_BLOCKNO);
-    assert!(pg_sys::BufferGetBlockNumber(managed_buffer) == MANAGED_BLOCKNO);
+    assert!(pg_sys::BufferGetBlockNumber(tantivy_meta_buffer) == TANTIVY_META_BLOCKNO);
+    assert!(pg_sys::BufferGetBlockNumber(tantivy_managed_buffer) == TANTIVY_MANAGED_BLOCKNO);
 
-    pg_sys::MarkBufferDirty(buffer);
+    pg_sys::MarkBufferDirty(metadata_buffer);
+    pg_sys::MarkBufferDirty(segment_handle_buffer);
     pg_sys::MarkBufferDirty(lock_buffer);
-    pg_sys::MarkBufferDirty(meta_buffer);
-    pg_sys::MarkBufferDirty(managed_buffer);
-    pg_sys::UnlockReleaseBuffer(buffer);
+    pg_sys::MarkBufferDirty(tantivy_meta_buffer);
+    pg_sys::MarkBufferDirty(tantivy_managed_buffer);
+
+    pg_sys::UnlockReleaseBuffer(metadata_buffer);
+    pg_sys::UnlockReleaseBuffer(segment_handle_buffer);
     pg_sys::UnlockReleaseBuffer(lock_buffer);
-    pg_sys::UnlockReleaseBuffer(meta_buffer);
-    pg_sys::UnlockReleaseBuffer(managed_buffer);
+    pg_sys::UnlockReleaseBuffer(tantivy_meta_buffer);
+    pg_sys::UnlockReleaseBuffer(tantivy_managed_buffer);
 }

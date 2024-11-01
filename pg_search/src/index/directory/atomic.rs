@@ -1,10 +1,5 @@
-use crate::index::segment_handle::SegmentHandleSpecialData;
-use crate::postgres::buffer::{BufferCache, MANAGED_BLOCKNO, META_BLOCKNO};
+use crate::postgres::buffer::{BufferCache, TANTIVY_MANAGED_BLOCKNO, TANTIVY_META_BLOCKNO};
 use pgrx::*;
-
-pub(crate) struct AtomicSpecialData {
-    next_blockno: pg_sys::BlockNumber,
-}
 
 // Handles Tantivy's atomic_read and atomic_write over block storage
 #[derive(Clone, Debug)]
@@ -18,19 +13,19 @@ impl AtomicDirectory {
     }
 
     pub unsafe fn read_meta(&self) -> Vec<u8> {
-        self.read_bytes(META_BLOCKNO)
+        self.read_bytes(TANTIVY_META_BLOCKNO)
     }
 
     pub unsafe fn read_managed(&self) -> Vec<u8> {
-        self.read_bytes(MANAGED_BLOCKNO)
+        self.read_bytes(TANTIVY_MANAGED_BLOCKNO)
     }
 
     pub unsafe fn write_meta(&self, data: &[u8]) {
-        self.write_bytes(data, META_BLOCKNO);
+        self.write_bytes(data, TANTIVY_META_BLOCKNO);
     }
 
     pub unsafe fn write_managed(&self, data: &[u8]) {
-        self.write_bytes(data, MANAGED_BLOCKNO);
+        self.write_bytes(data, TANTIVY_MANAGED_BLOCKNO);
     }
 
     // TODO: Handle read_bytes and write_bytes where data is larger than a page

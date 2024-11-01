@@ -34,7 +34,7 @@ use crate::index::reader::segment_handle::SegmentHandleReader;
 use crate::index::segment_handle::SegmentHandle;
 use crate::index::writer::segment_handle::SegmentHandleWriter;
 use crate::postgres::buffer::{
-    BufferCache, INDEX_WRITER_LOCK_BLOCKNO, MANAGED_BLOCKNO, META_BLOCKNO,
+    BufferCache, INDEX_WRITER_LOCK_BLOCKNO, TANTIVY_MANAGED_BLOCKNO, TANTIVY_META_BLOCKNO,
 };
 
 /// Defined by Tantivy in core/mod.rs
@@ -75,9 +75,9 @@ impl BlockingDirectory {
 
     pub unsafe fn acquire_blocking_lock(&self, lock: &Lock) -> Result<BlockingLock> {
         let blockno = if lock.filepath == META_LOCK.filepath {
-            META_BLOCKNO
+            TANTIVY_META_BLOCKNO
         } else if lock.filepath == MANAGED_LOCK.filepath {
-            MANAGED_BLOCKNO
+            TANTIVY_MANAGED_BLOCKNO
         } else if lock.filepath == INDEX_WRITER_LOCK.filepath {
             INDEX_WRITER_LOCK_BLOCKNO
         } else {

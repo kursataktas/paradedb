@@ -7,11 +7,6 @@ use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::slice::from_raw_parts;
 
-pub(crate) struct SegmentHandleSpecialData {
-    // If the metadata block overflows, the next block to write to
-    pub insert_blockno: pg_sys::BlockNumber,
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct SegmentHandle {
     pub path: PathBuf,
@@ -27,7 +22,6 @@ impl SegmentHandle {
 
         let mut offsetno = pg_sys::FirstOffsetNumber;
         // TODO: Implement a way to read the next block if the current block is full
-        // TODO: Would a HashMap implementation be more efficient?
         while offsetno <= pg_sys::PageGetMaxOffsetNumber(page) {
             let item_id = pg_sys::PageGetItemId(page, offsetno);
             let item = pg_sys::PageGetItem(page, item_id);
@@ -53,16 +47,16 @@ impl SegmentHandle {
         total_bytes: usize,
     ) {
         let cache = BufferCache::open(relation_oid);
-        let mut buffer = cache.get_buffer(SEGMENT_HANDLE_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
-        let mut page = pg_sys::BufferGetPage(buffer);
-        let special = pg_sys::PageGetSpecialPointer(page) as *mut SegmentHandleSpecialData;
+        let buffer = cache.get_buffer(SEGMENT_HANDLE_BLOCKNO, Some(pg_sys::BUFFER_LOCK_SHARE));
+        let page = pg_sys::BufferGetPage(buffer);
 
         if pg_sys::PageGetFreeSpace(page) < size_of::<SegmentHandle>() {
-            let new_buffer = cache.new_buffer(size_of::<SegmentHandle>());
-            (*special).insert_blockno = pg_sys::BufferGetBlockNumber(new_buffer);
-            pg_sys::MarkBufferDirty(buffer);
-            buffer = new_buffer;
-            page = pg_sys::BufferGetPage(buffer);
+            // let new_buffer = cache.new_buffer(size_of::<SegmentHandle>());
+            // (*special).insert_blockno = pg_sys::BufferGetBlockNumber(new_buffer);
+            // pg_sys::MarkBufferDirty(buffer);
+            // buffer = new_buffer;
+            // page = pg_sys::BufferGetPage(buffer);
+            todo!("go to next page");
         }
 
         let segment = SegmentHandle {
