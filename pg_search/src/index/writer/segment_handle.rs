@@ -122,8 +122,8 @@ impl TerminatingWrite for SegmentHandleWriter {
                 &self.path,
                 self.blocks.clone(),
                 self.total_bytes,
-            );
-            Ok(())
+            )
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
         }
     }
 }

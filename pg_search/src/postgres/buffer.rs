@@ -7,6 +7,14 @@ pub const INDEX_WRITER_LOCK_BLOCKNO: pg_sys::BlockNumber = 2; // Used for Tantiv
 pub const TANTIVY_META_BLOCKNO: pg_sys::BlockNumber = 3; // Used for Tantivy's meta.json
 pub const TANTIVY_MANAGED_BLOCKNO: pg_sys::BlockNumber = 4; // Used for Tantivy's managed.json
 
+pub struct MetaPageData {
+    pub segment_handle_insert_blockno: pg_sys::BlockNumber,
+}
+
+pub struct LinkedBlockSpecialData {
+    pub next_blockno: pg_sys::BlockNumber,
+}
+
 // Reads and writes buffers from the buffer cache for a pg_sys::Relation
 #[derive(Clone, Debug)]
 pub struct BufferCache {

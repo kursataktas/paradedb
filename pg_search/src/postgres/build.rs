@@ -17,8 +17,8 @@
 
 use crate::index::{SearchIndex, WriterResources};
 use crate::postgres::buffer::{
-    BufferCache, INDEX_WRITER_LOCK_BLOCKNO, SEGMENT_HANDLE_BLOCKNO, TANTIVY_MANAGED_BLOCKNO,
-    TANTIVY_META_BLOCKNO,
+    BufferCache, LinkedBlockSpecialData, MetaPageData, INDEX_WRITER_LOCK_BLOCKNO,
+    SEGMENT_HANDLE_BLOCKNO, TANTIVY_MANAGED_BLOCKNO, TANTIVY_META_BLOCKNO,
 };
 use crate::postgres::index::get_fields;
 use crate::postgres::insert::init_insert_state;
@@ -201,14 +201,6 @@ fn is_bm25_index(indexrel: &PgRelation) -> bool {
         // SAFETY:  we ensure that `indexrel.rd_indam` is non null and can be dereferenced
         !indexrel.rd_indam.is_null() && (*indexrel.rd_indam).ambuild == Some(ambuild)
     }
-}
-
-struct MetaPageData {
-    segment_handle_insert_blockno: pg_sys::BlockNumber,
-}
-
-struct LinkedBlockSpecialData {
-    next_blockno: pg_sys::BlockNumber,
 }
 
 unsafe fn create_metadata(relation_oid: u32) {
