@@ -32,7 +32,7 @@ use crate::schema::{
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use pgrx::PgRelation;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::Serialize;
 use std::num::NonZeroUsize;
 use tantivy::indexer::NoMergePolicy;
 use tantivy::merge_policy::MergePolicy;
