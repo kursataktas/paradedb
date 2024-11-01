@@ -258,6 +258,6 @@ pub enum IndexError {
     #[error("couldn't remove index files on drop_index: {0}")]
     DeleteDirectory(#[from] SearchDirectoryError),
 
-    #[error("key_field column cannot be NULL")]
-    KeyIdNull,
+    #[error("key_field column '{0}' cannot be NULL")]
+    KeyIdNull(String),
 }

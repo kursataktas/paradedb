@@ -632,7 +632,6 @@ async fn json_array_mixed_data(mut conn: PgConnection) {
 }
 
 #[rstest]
-#[ignore]
 async fn json_nested_arrays(mut conn: PgConnection) {
     SimpleProductsTable::setup().execute(&mut conn);
 
@@ -1236,7 +1235,6 @@ fn json_array_term(mut conn: PgConnection) {
 }
 
 #[rstest]
-#[ignore]
 fn separate_nested_json_docs(mut conn: PgConnection) {
     r#"
     CALL paradedb.create_bm25_test_table(
@@ -1300,7 +1298,6 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
 }
 
 #[rstest]
-#[ignore]
 fn test_nested_json_array_conditions(mut conn: PgConnection) {
     r#"
     CALL paradedb.create_bm25_test_table(

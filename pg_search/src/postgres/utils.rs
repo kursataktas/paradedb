@@ -131,22 +131,6 @@ pub unsafe fn row_to_search_documents(
         })
         .collect();
 
-    pgrx::log!("strategy_lookup count {}", strategy_lookup.len());
-    pgrx::log!("schema_fields_count {}", schema.fields.len());
-    for search_field in &schema.fields {
-        match strategy_lookup.get(&search_field.id) {
-            None => {
-                pgrx::log!("search_field_not_found {:?}", search_field)
-            }
-            _ => {}
-        }
-    }
-
-    // Check if key field was filtered out for being null.
-    if strategy_lookup.get(&schema.key_field().id).is_none() {
-        return Err(IndexError::KeyIdNull);
-    }
-
     let mut json_field_lookup: HashMap<JsonPath, &SearchField> = HashMap::new();
     let mut nested_lookup: HashSet<JsonPath> = HashSet::new();
 
@@ -225,7 +209,9 @@ pub unsafe fn row_to_search_documents(
                 document.insert(search_field.id, value.tantivy_schema_value());
             }
             Some(MergeStrategy::Null) => {
-                // Skip null values.
+                if search_field.id == schema.key_field().id {
+                    return Err(IndexError::KeyIdNull(search_field.name.to_string()));
+                }
             }
             None => {
                 // If there is no strategy defined for the index field, then it doesn't
