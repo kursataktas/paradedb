@@ -41,7 +41,7 @@ use crate::query::AsFieldType;
 pub struct SearchFieldName(pub String);
 
 /// The name of a field, as it appears to Postgres.
-#[derive(Debug, Copy, Clone, From, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, From, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[from(forward)]
 pub struct SearchFieldId(pub Field);
 

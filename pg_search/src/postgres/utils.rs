@@ -20,9 +20,12 @@ use std::str::FromStr;
 
 use crate::index::IndexError;
 use crate::postgres::types::{JsonPath, TantivyValue};
-use crate::schema::{SearchDocument, SearchField, SearchFieldConfig, SearchIndexSchema};
+use crate::schema::{
+    SearchDocument, SearchField, SearchFieldConfig, SearchFieldId, SearchIndexSchema,
+};
 use anyhow::{anyhow, Result};
 use chrono::{NaiveDate, NaiveTime};
+use pg_sys::Datum;
 use pgrx::itemptr::{item_pointer_get_both, item_pointer_set_all};
 use pgrx::*;
 use tantivy::schema::OwnedValue;
@@ -79,27 +82,31 @@ pub unsafe fn row_to_search_documents(
     schema: &SearchIndexSchema,
 ) -> Result<Vec<SearchDocument>, IndexError> {
     enum MergeStrategy {
-        Array,
-        Json,
-        Field,
+        Array(PgOid, pg_sys::Datum),
+        JsonArray(PgOid, pg_sys::Datum),
+        Json(PgOid, pg_sys::Datum),
+        Field(PgOid, pg_sys::Datum),
+        Null,
     }
 
     let ctid_index_value = item_pointer_to_u64(ctid);
 
     // JSON fields require special processing. If a JSON path is configured
     // with 'nested', we need to make a new field for each member of nested arrays.
-    let (json_fields, other_fields): (Vec<_>, Vec<_>) = tupdesc
+    let strategy_lookup: HashMap<SearchFieldId, MergeStrategy> = tupdesc
         .iter()
         .enumerate()
-        .filter_map(|(attno, attribute)| {
+        .filter_map(move |(attno, attribute)| {
             let attname = attribute.name().to_string();
+            let search_field = match schema.get_search_field(&attname.clone().into()) {
+                Some(search_field) => search_field,
+                None => return None, // Filter out values in non-indexed column
+            };
 
-            schema
-                .get_search_field(&attname.clone().into())
-                .filter(|_| !(*isnull.add(attno)))
-                .map(move |field| (attno, attribute, field))
-        })
-        .map(move |(attno, attribute, search_field)| {
+            if *isnull.add(attno) {
+                return Some((search_field.id, MergeStrategy::Null));
+            }
+
             let attribute_type_oid = attribute.type_oid();
             let array_type = pg_sys::get_element_type(attribute_type_oid.value());
             let (base_oid, is_array) = if array_type != pg_sys::InvalidOid {
@@ -107,102 +114,135 @@ pub unsafe fn row_to_search_documents(
             } else {
                 (attribute_type_oid, false)
             };
-
             let is_json = matches!(
                 base_oid,
                 PgOid::BuiltIn(pg_sys::BuiltinOid::JSONBOID | pg_sys::BuiltinOid::JSONOID)
             );
+            let datum = *values.add(attno);
 
-            let is_nested = matches!(
-                search_field.config,
-                SearchFieldConfig::Json { nested: true, .. }
-            );
-
-            if is_nested && !is_json {
-                panic!(
-                    "search field {} configured as 'nested', but it is not a JSON field",
-                    search_field.name
-                );
-            }
-
-            // Nested json fields don't correspond to an actual Postgres column, so we
-            // won't try and look up datums with the field name.
-            let datum = if is_nested {
-                None
-            } else {
-                Some(*values.add(attno))
+            let strategy = match (is_json, is_array) {
+                (true, false) => MergeStrategy::Json(base_oid, datum),
+                (true, true) => MergeStrategy::JsonArray(base_oid, datum),
+                (false, false) => MergeStrategy::Field(base_oid, datum),
+                (false, true) => MergeStrategy::Array(base_oid, datum),
             };
 
-            if is_array {
-                (MergeStrategy::Array, search_field, datum, base_oid)
-            } else if is_json {
-                (MergeStrategy::Json, search_field, datum, base_oid)
-            } else {
-                (MergeStrategy::Field, search_field, datum, base_oid)
-            }
+            Some((search_field.id, strategy))
         })
-        .partition(|(strategy, _, _, _)| matches!(strategy, MergeStrategy::Json));
-
-    if !other_fields
-        .iter() // Check if key field was filtered out for being null.
-        .any(|(_, search_field, _, _)| &search_field.id == &schema.key_field().id)
-    {
-        return Err(IndexError::KeyIdNull);
-    }
-
-    let json_field_lookup: HashMap<JsonPath, &SearchField> = json_fields
-        .iter()
-        .map(|(_, f, _, _)| (JsonPath::from(f.name.0.as_ref()), *f))
         .collect();
 
-    let nested_lookup: HashSet<&JsonPath> = json_field_lookup
-        .iter()
-        .filter(|(_, f)| matches!(f.config, SearchFieldConfig::Json { nested: true, .. }))
-        .map(|(path, _)| path)
-        .collect();
-
-    let mut document = schema.new_document(ctid_index_value);
-    for (_, search_field, datum, base_oid) in json_fields {
-        let path = JsonPath::from(search_field.name.0.as_ref());
-        // JSON nested fields won't have datums.
-        if let Some(datum) = datum {
-            for (path, value) in
-                TantivyValue::try_from_datum_json(&nested_lookup, path, datum, base_oid)
-                    .expect("must be able to retrieve json values from datum")
-            {
-                let parent = path.parent();
-                let key = path.key;
-                let is_nested = nested_lookup.contains(&parent);
-
-                let search_field = if is_nested {
-                    json_field_lookup
-                        .get(&parent)
-                        .expect("search field should exist for json path")
-                } else {
-                    search_field
-                };
-
-                document.insert(search_field.id, OwnedValue::Object(vec![(key, value.0)]))
+    pgrx::log!("strategy_lookup count {}", strategy_lookup.len());
+    pgrx::log!("schema_fields_count {}", schema.fields.len());
+    for search_field in &schema.fields {
+        match strategy_lookup.get(&search_field.id) {
+            None => {
+                pgrx::log!("search_field_not_found {:?}", search_field)
             }
+            _ => {}
         }
     }
 
-    // Insert non-JSON fields into all documents
-    for (strategy, search_field, datum, base_oid) in other_fields {
-        match strategy {
-            MergeStrategy::Array => {
-                let datum = datum.expect("non-nested JSON field should have an associated datum");
-                let datum_values = TantivyValue::try_from_datum_array(datum, base_oid)
+    // Check if key field was filtered out for being null.
+    if strategy_lookup.get(&schema.key_field().id).is_none() {
+        return Err(IndexError::KeyIdNull);
+    }
+
+    let mut json_field_lookup: HashMap<JsonPath, &SearchField> = HashMap::new();
+    let mut nested_lookup: HashSet<JsonPath> = HashSet::new();
+
+    for search_field in &schema.fields {
+        let path = JsonPath::from(search_field.name.0.as_ref());
+        let (is_json, is_nested) = match search_field.config {
+            SearchFieldConfig::Json { nested, .. } => (true, nested),
+            _ => (false, false),
+        };
+
+        json_field_lookup.insert(path.clone(), &search_field);
+        if is_nested && is_json {
+            nested_lookup.insert(path.clone());
+        }
+    }
+
+    let mut document = schema.new_document(ctid_index_value);
+
+    for search_field in &schema.fields {
+        match strategy_lookup.get(&search_field.id) {
+            Some(
+                strategy @ MergeStrategy::Json(oid, datum)
+                | strategy @ MergeStrategy::JsonArray(oid, datum),
+            ) => {
+                let path = JsonPath::from(search_field.name.0.as_ref());
+                let path_values = if matches!(strategy, MergeStrategy::JsonArray(_, _)) {
+                    let array_datum: Array<Datum> = pgrx::Array::from_datum(*datum, false)
+                        .expect("must be able to read json array datum");
+                    array_datum
+                        .iter()
+                        .flatten()
+                        .flat_map(|datum| {
+                            TantivyValue::try_from_datum_json(
+                                &nested_lookup,
+                                path.clone(),
+                                datum,
+                                *oid,
+                            )
+                            .expect("must be able to retrieve json values from datum")
+                            .into_iter()
+                        })
+                        .collect()
+                } else {
+                    TantivyValue::try_from_datum_json(&nested_lookup, path, *datum, *oid)
+                        .expect("must be able to retrieve json values from datum")
+                };
+
+                for (path, value) in path_values {
+                    let key = path.key.clone();
+                    let parent = path.parent().unwrap_or(path);
+                    let is_nested = nested_lookup.contains(&parent);
+
+                    if is_nested {
+                        let parent_search_field = json_field_lookup
+                            .get(&parent)
+                            .expect("search field should exist for json path");
+                        document.insert(
+                            parent_search_field.id,
+                            OwnedValue::Object(vec![(key, value.0)]),
+                        )
+                    } else {
+                        document.insert(search_field.id, value.0)
+                    };
+                }
+            }
+            Some(MergeStrategy::Array(oid, datum)) => {
+                let datum_values = TantivyValue::try_from_datum_array(*datum, *oid)
                     .unwrap_or_else(|err| panic!("could not read array datum: {err}"));
                 for value in datum_values {
                     document.insert(search_field.id, value.tantivy_schema_value());
                 }
             }
-            _ => {
-                let datum = datum.expect("non-nested JSON field should have an associated datum");
-                let value = TantivyValue::try_from_datum(datum, base_oid)
+            Some(MergeStrategy::Field(oid, datum)) => {
+                let value = TantivyValue::try_from_datum(*datum, *oid)
                     .unwrap_or_else(|err| panic!("could not read datum: {err}"));
                 document.insert(search_field.id, value.tantivy_schema_value());
+            }
+            Some(MergeStrategy::Null) => {
+                // Skip null values.
+            }
+            None => {
+                // If there is no strategy defined for the index field, then it doesn't
+                // correspond to a Postgres column. The the only valid non-CTID
+                // configuration for a field like this is a nested JSON field.
+                // Check if we have that, othewise it's an error.
+                let is_nested_json = matches!(
+                    search_field.config,
+                    SearchFieldConfig::Json { nested: true, .. }
+                );
+                let is_ctid = matches!(search_field.config, SearchFieldConfig::Ctid);
+                if !(is_nested_json || is_ctid) {
+                    panic!(
+                        "field '{}' skipped datum read, but is not a nested JSON field",
+                        search_field.name
+                    )
+                }
             }
         }
     }

@@ -92,7 +92,7 @@ impl TantivyValue {
     }
 
     fn json_value_to_tantivy_values<'a>(
-        is_nested: &'a HashSet<&JsonPath>,
+        is_nested: &'a HashSet<JsonPath>,
         path: JsonPath,
         value: Value,
     ) -> Box<dyn Iterator<Item = (JsonPath, TantivyValue)> + 'a> {
@@ -150,7 +150,7 @@ impl TantivyValue {
     }
 
     pub unsafe fn try_from_datum_json<'a>(
-        is_nested: &HashSet<&JsonPath>,
+        is_nested: &'a HashSet<JsonPath>,
         path: JsonPath,
         datum: Datum,
         oid: PgOid,
@@ -1006,8 +1006,13 @@ pub struct JsonPath {
 }
 
 impl JsonPath {
-    pub fn parent(&self) -> Self {
-        Self::from(self.path.clone())
+    pub fn parent(&self) -> Option<Self> {
+        let mut path = self.path.clone();
+        if let Some(key) = path.pop() {
+            Some(Self { path, key })
+        } else {
+            None
+        }
     }
 
     pub fn child<T: ToString>(&self, key: T) -> Self {
@@ -1020,17 +1025,10 @@ impl JsonPath {
     }
 }
 
-impl From<Vec<String>> for JsonPath {
-    fn from(value: Vec<String>) -> Self {
-        let mut path = value.clone();
-        let key = path.pop().expect("JsonPath string must not be empty");
-        Self { path, key }
-    }
-}
-
 impl From<&str> for JsonPath {
     fn from(value: &str) -> Self {
-        let path = value.split('.').map(|s| s.to_string()).collect::<Vec<_>>();
-        Self::from(path)
+        let mut path = value.split('.').map(|s| s.to_string()).collect::<Vec<_>>();
+        let key = path.pop().expect("JsonPath string must not be empty");
+        Self { path, key }
     }
 }

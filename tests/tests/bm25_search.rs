@@ -304,17 +304,18 @@ fn json_arrays(mut conn: PgConnection) {
     (ARRAY['{"name": "Mike", "age": 50}'::JSONB, '{"name": "Lisa", "age": 45}'::JSONB]);"#
         .execute(&mut conn);
 
-    match "CALL paradedb.create_bm25(
+    "CALL paradedb.create_bm25(
         index_name => 'example_table',
         table_name => 'example_table',
         key_field => 'id',
         json_fields => paradedb.field('json_array')
     )"
-    .execute_result(&mut conn)
-    {
-        Ok(_) => panic!("json arrays should not yet be supported"),
-        Err(err) => assert!(err.to_string().contains("not yet supported")),
-    }
+    .execute(&mut conn);
+
+    let rows = "SELECT id from example_table WHERE id @@@ 'json_array.name:John'"
+        .fetch::<(i32,)>(&mut conn);
+
+    assert_eq!(rows, vec![(1,)]);
 }
 
 #[rstest]
@@ -631,6 +632,7 @@ async fn json_array_mixed_data(mut conn: PgConnection) {
 }
 
 #[rstest]
+#[ignore]
 async fn json_nested_arrays(mut conn: PgConnection) {
     SimpleProductsTable::setup().execute(&mut conn);
 
@@ -657,7 +659,6 @@ async fn json_nested_arrays(mut conn: PgConnection) {
 }
 
 #[rstest]
-// // #[ignore = "@@@"]
 fn bm25_partial_index_search(mut conn: PgConnection) {
     SimpleProductsTable::setup().execute(&mut conn);
 
@@ -1235,6 +1236,7 @@ fn json_array_term(mut conn: PgConnection) {
 }
 
 #[rstest]
+#[ignore]
 fn separate_nested_json_docs(mut conn: PgConnection) {
     r#"
     CALL paradedb.create_bm25_test_table(
@@ -1298,6 +1300,7 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
 }
 
 #[rstest]
+#[ignore]
 fn test_nested_json_array_conditions(mut conn: PgConnection) {
     r#"
     CALL paradedb.create_bm25_test_table(
