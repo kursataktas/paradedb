@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-use crate::index::reader::index::SearchResults;
+use crate::index::reader::index::{search_via_channel, SearchResults};
 use crate::index::SearchIndex;
 use crate::postgres::customscan::pdbscan::exec_methods::{ExecMethod, ExecState};
 use crate::postgres::customscan::pdbscan::scan_state::PdbScanState;
@@ -30,7 +30,8 @@ impl ExecMethod for NormalScanExecState {
     fn init(&mut self, state: &PdbScanState, _cstate: *mut pg_sys::CustomScanState) {
         let search_reader = state.search_reader.as_ref().unwrap();
         let query = state.query.as_ref().unwrap();
-        self.search_results = search_reader.search_via_channel(
+        self.search_results = search_via_channel(
+            state.indexrelid.into(),
             state.need_scores,
             false,
             SearchIndex::executor(),

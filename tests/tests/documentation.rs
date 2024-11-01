@@ -1641,7 +1641,7 @@ fn autocomplete(mut conn: PgConnection) {
     assert_eq!(rows, expected);
 
     r#"
-    CALL paradedb.drop_bm25('search_idx');
+    DROP INDEX search_idx_bm25_index CASCADE;
     CALL paradedb.create_bm25(
         index_name => 'ngrams_idx',
         schema_name => 'public',
@@ -1837,6 +1837,7 @@ fn schema(mut conn: PgConnection) {
 }
 
 #[rstest]
+#[ignore = "paradedb.index_size deprecated"]
 fn index_size(mut conn: PgConnection) {
     r#"
     CALL paradedb.create_bm25_test_table(

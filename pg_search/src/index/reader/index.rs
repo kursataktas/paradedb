@@ -15,6 +15,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
+use crate::index::directory::blocking::BlockingDirectory;
+use crate::index::directory::channel::{
+    ChannelDirectory, ChannelRequest, ChannelRequestHandler, ChannelResponse,
+};
 use crate::index::SearchIndex;
 use crate::query::SearchQueryInput;
 use crate::schema::{SearchFieldName, SearchIndexSchema};
@@ -24,6 +28,7 @@ use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use tantivy::collector::{Collector, TopDocs};
 use tantivy::fastfield::Column;
+use tantivy::index::Index;
 use tantivy::query::QueryParser;
 use tantivy::schema::FieldType;
 use tantivy::{
@@ -219,51 +224,6 @@ impl SearchIndexReader {
             }
             _ => panic!("failed to create snippet generator for field: {field_name}... can only highlight text fields")
         }
-    }
-
-    /// Search the Tantivy index for matching documents, in the background, streaming the matching
-    /// documents back as they're found.
-    ///
-    /// The order of returned docs is unspecified.
-    ///
-    /// It has no understanding of Postgres MVCC visibility.  It is the caller's responsibility to
-    /// handle that, if it's necessary.
-    pub fn search_via_channel(
-        &self,
-        _need_scores: bool,
-        _sort_segments_by_ctid: bool,
-        executor: &'static Executor,
-        query: &dyn Query,
-    ) -> SearchResults {
-        let n = self.searcher.num_docs();
-        let collector = TopDocs::with_limit(n as usize);
-        let results = self
-            .searcher
-            .search_with_executor(
-                query,
-                &collector,
-                executor,
-                tantivy::query::EnableScoring::Enabled {
-                    searcher: &self.searcher,
-                    statistics_provider: &self.searcher,
-                },
-            )
-            .expect("failed to search")
-            .into_iter();
-
-        let mut top_docs = Vec::with_capacity(results.len());
-        for (ff_u64_value, doc_address) in results {
-            let segment_reader = self.searcher.segment_reader(doc_address.segment_ord);
-            let ctid_ff = segment_reader
-                .fast_fields()
-                .u64("ctid")
-                .expect("ctid should be a fast field");
-
-            let scored = SearchIndexScore::new(&ctid_ff, doc_address.doc_id, ff_u64_value);
-            top_docs.push((scored, doc_address));
-        }
-
-        SearchResults::TopNByField(top_docs.len(), top_docs.into_iter())
     }
 
     /// Search a specific index segment for matching documents.
@@ -466,6 +426,67 @@ impl SearchIndexReader {
 
         Some((count as f64 / segment_doc_proportion).ceil() as usize)
     }
+}
+
+pub fn search_via_channel(
+    index_oid: u32,
+    need_scores: bool,
+    sort_segments_by_ctid: bool,
+    executor: &'static Executor,
+    query: &dyn Query,
+) -> SearchResults {
+    let (search_sender, search_receiver) = crossbeam::channel::unbounded();
+    let (request_sender, request_receiver) = crossbeam::channel::unbounded::<ChannelRequest>();
+    let (response_sender, response_receiver) = crossbeam::channel::unbounded::<ChannelResponse>();
+
+    let collector =
+        collector::ChannelCollector::new(need_scores, sort_segments_by_ctid, search_sender);
+
+    let owned_query = query.box_clone();
+    std::thread::spawn(move || {
+        let channel_directory =
+            ChannelDirectory::new(request_sender.clone(), response_receiver.clone());
+        let channel_index = Index::open(channel_directory).expect("channel index should open");
+        let reader = channel_index
+            .reader_builder()
+            .reload_policy(tantivy::ReloadPolicy::Manual)
+            .try_into()
+            .unwrap();
+        let searcher = reader.searcher();
+        let schema = channel_index.schema();
+
+        let _ = searcher
+            .search_with_executor(
+                &owned_query,
+                &collector,
+                executor,
+                if need_scores {
+                    tantivy::query::EnableScoring::Enabled {
+                        searcher: &searcher,
+                        statistics_provider: &searcher,
+                    }
+                } else {
+                    tantivy::query::EnableScoring::Disabled {
+                        schema: &schema,
+                        searcher_opt: Some(&searcher),
+                    }
+                },
+            )
+            .expect("failed to search");
+
+        request_sender.send(ChannelRequest::Terminate).unwrap();
+    });
+
+    let blocking_directory = BlockingDirectory::new(index_oid);
+    let handler = ChannelRequestHandler::open(
+        blocking_directory,
+        index_oid,
+        response_sender,
+        request_receiver,
+    );
+    let _ = handler.receive_blocking(Some(|_| false)).unwrap();
+
+    SearchResults::Channel(search_receiver.into_iter().flatten())
 }
 
 mod collector {

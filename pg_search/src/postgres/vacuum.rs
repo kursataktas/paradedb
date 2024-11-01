@@ -83,6 +83,9 @@ pub extern "C" fn amvacuumcleanup(
         request_receiver,
     );
     let _ = handler.receive_blocking(Some(|_| false)).unwrap();
+
+    // TODO: Clean up the SegmentHandle pages
+
     unsafe { pg_sys::IndexFreeSpaceMapVacuum(info.index) };
     stats
 }
