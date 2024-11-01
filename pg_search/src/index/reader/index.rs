@@ -455,7 +455,7 @@ pub fn search_via_channel(
         let searcher = reader.searcher();
         let schema = channel_index.schema();
 
-        let _ = searcher
+        searcher
             .search_with_executor(
                 &owned_query,
                 &collector,

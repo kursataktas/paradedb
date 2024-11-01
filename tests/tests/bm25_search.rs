@@ -17,7 +17,6 @@
 
 mod fixtures;
 
-use crate::fixtures::utils::pg_search_index_directory_path;
 use anyhow::Result;
 use approx::assert_relative_eq;
 use core::panic;
@@ -27,7 +26,6 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 use sqlx::{types::BigDecimal, PgConnection};
 use std::str::FromStr;
-use tantivy::Index;
 
 #[rstest]
 async fn basic_search_query(mut conn: PgConnection) -> Result<(), sqlx::Error> {

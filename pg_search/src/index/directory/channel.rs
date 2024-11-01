@@ -221,7 +221,7 @@ impl ChannelRequestHandler {
         receiver: Receiver<ChannelRequest>,
     ) -> Self {
         Self {
-            directory: directory,
+            directory,
             relation_oid,
             receiver,
             sender,

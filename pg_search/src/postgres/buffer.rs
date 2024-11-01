@@ -31,7 +31,14 @@ impl BufferCache {
 
     pub unsafe fn new_buffer(&self, special_size: usize) -> pg_sys::Buffer {
         // Providing an InvalidBlockNumber creates a new page
+        let mut unlock_relation = false;
         let mut blockno = pg_sys::GetFreeIndexPage(self.boxed.as_ptr());
+
+        if blockno == pg_sys::InvalidBlockNumber {
+            pg_sys::LockRelationForExtension(self.boxed.as_ptr(), pg_sys::ExclusiveLock as i32);
+            unlock_relation = true;
+        }
+
         let mut buffer = self.get_buffer(blockno, None);
 
         // If we can't acquire a conditional lock on the buffer, it's being used by another process
@@ -39,6 +46,12 @@ impl BufferCache {
         while blockno != pg_sys::InvalidBlockNumber && !pg_sys::ConditionalLockBuffer(buffer) {
             pg_sys::ReleaseBuffer(buffer);
             blockno = pg_sys::GetFreeIndexPage(self.boxed.as_ptr());
+
+            if blockno == pg_sys::InvalidBlockNumber {
+                pg_sys::LockRelationForExtension(self.boxed.as_ptr(), pg_sys::ExclusiveLock as i32);
+                unlock_relation = true;
+            }
+
             buffer = self.get_buffer(blockno, None);
         }
 
@@ -52,6 +65,10 @@ impl BufferCache {
         }
 
         pg_sys::MarkBufferDirty(buffer);
+
+        if unlock_relation {
+            pg_sys::UnlockRelationForExtension(self.boxed.as_ptr(), pg_sys::ExclusiveLock as i32);
+        }
         // Returns the BlockNumber of the newly-created page
         buffer
     }
@@ -75,7 +92,6 @@ impl BufferCache {
     }
 
     pub unsafe fn record_free_index_page(&self, blockno: pg_sys::BlockNumber) {
-        pgrx::info!("Recording free index page for blockno {}", blockno);
         pg_sys::RecordFreeIndexPage(self.boxed.as_ptr(), blockno);
     }
 }

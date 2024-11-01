@@ -54,6 +54,7 @@ async fn test_simultaneous_commits_with_bm25(database: Db) -> Result<()> {
     );"
     .execute(&mut conn1);
 
+    println!("created bm25");
     // Dynamically generate at least 100 rows for each connection
     let mut rng = rand::thread_rng();
     let categories = [
@@ -87,10 +88,14 @@ async fn test_simultaneous_commits_with_bm25(database: Db) -> Result<()> {
         join_all(futures).await;
     }
 
+    println!("inserted items");
+
     // Verify the number of rows in each database
     let rows1: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM concurrent_items")
         .fetch_one(&mut conn1)
         .await?;
+
+    println!("got count");
 
     assert_eq!(rows1, 250);
 

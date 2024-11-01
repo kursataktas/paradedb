@@ -28,7 +28,6 @@ use std::panic::{catch_unwind, resume_unwind};
 pub struct InsertState {
     pub index: SearchIndex,
     pub writer: Option<SearchIndexWriter>,
-    pub relation: pg_sys::Relation,
     abort_on_drop: bool,
     committed: bool,
 }
@@ -96,7 +95,6 @@ impl InsertState {
             writer: Some(writer),
             abort_on_drop: false,
             committed: false,
-            relation: index_relation,
         })
     }
 }
