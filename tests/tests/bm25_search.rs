@@ -1305,21 +1305,21 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
     FROM customers WHERE id @@@ paradedb.parse_nested(
         field => 'crm_data',
         ordinal => 10,
-        must => ARRAY['interaction:sms']
+        must => ARRAY['interaction:email']
     )
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(rows, vec![(1, "Customer A".to_string())]); // Customer A should be found
 
-    // Test search with only one condition and short syntax
+    // Test search with short syntax, field should not be found as only nesting is available.
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:call'
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
-    assert_eq!(rows, vec![(1, "Customer A".to_string())]); // Customer A should be found
+    assert_eq!(rows, vec![]); // Customer A should be found
 }
 
 #[rstest]
@@ -1339,7 +1339,7 @@ fn test_nested_json_array_conditions(mut conn: PgConnection) {
         table_name => 'customers',
         key_field => 'id',
         text_fields => paradedb.field('name'),
-        json_fields => paradedb.field('crm_data', fast => true)
+        json_fields => paradedb.field('crm_data', fast => true, nested => ARRAY['crm_data'])
     );
     "#
     .execute(&mut conn);
@@ -1348,7 +1348,11 @@ fn test_nested_json_array_conditions(mut conn: PgConnection) {
     // Customer A has "call" and "Welcome Call" in first object, "Goodbye Email" in second
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
-    FROM customers WHERE id @@@ 'crm_data.interaction:call AND crm_data.details.subject:"Goodbye Email"'
+    FROM customers WHERE id @@@ paradedb.parse_nested(
+        field => 'crm_data',
+        ordinal => 10,
+        must => ARRAY['interaction:call', 'details.subject:Goodbye']
+    )
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
@@ -1362,7 +1366,11 @@ fn test_nested_json_array_conditions(mut conn: PgConnection) {
     // Customer C has "call" and "Service Call" in the same object
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
-    FROM customers WHERE id @@@ 'crm_data.interaction:call AND crm_data.details.subject:"Service Call"'
+    FROM customers WHERE id @@@ paradedb.parse_nested(
+        field => 'crm_data',
+        ordinal => 10,
+        must => ARRAY['interaction:call', 'details.subject:"Service Call"']
+    )
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
@@ -1372,14 +1380,16 @@ fn test_nested_json_array_conditions(mut conn: PgConnection) {
         "Should match conditions in same object"
     );
 
-    // Test 3: Should not match across dates and interactions in different objects
-    // Customer B has "sms" with "2023-09-01" in first object, "email" with "2023-09-03" in second
+    // Test 3: Should not match across interactions in different objects
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ paradedb.boolean(
         must => ARRAY[
-            paradedb.term('crm_data.interaction', 'email'),
-            paradedb.range('crm_data.details.date', '[2023-09-01, 2023-09-01]'::daterange)
+            paradedb.parse_nested(
+                field => 'crm_data',
+                ordinal => 10,
+                must => ARRAY['interaction:email', 'subject:Discount']
+            )
         ]
     )
     ORDER BY score, id DESC;
@@ -1395,7 +1405,18 @@ fn test_nested_json_array_conditions(mut conn: PgConnection) {
     // Customer D has "email" and "Promotion" in same object
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
-    FROM customers WHERE id @@@ 'crm_data.interaction:email AND crm_data.details.subject:Promotion AND crm_data.details.date:"2023-09-06"'
+    FROM customers WHERE id @@@ paradedb.boolean(
+        must => ARRAY[
+            paradedb.parse_nested(
+                field => 'crm_data',
+                ordinal => 10,
+                must => ARRAY[
+                    'interaction:email',
+                    'details.subject:Promotion'
+                ]
+            )
+        ]
+    )
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
