@@ -275,7 +275,7 @@ impl SearchFieldConfig {
             Some(v) => v
                 .as_array()
                 .ok_or_else(|| anyhow::anyhow!("'nested' must be an array of string paths"))?
-                .into_iter()
+                .iter()
                 .map(|v| {
                     v.as_str()
                         .map(|s| s.to_string())

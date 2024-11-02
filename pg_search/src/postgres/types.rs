@@ -149,8 +149,8 @@ impl TantivyValue {
         }
     }
 
-    pub unsafe fn try_from_datum_json<'a>(
-        is_nested: &'a HashSet<JsonPath>,
+    pub unsafe fn try_from_datum_json(
+        is_nested: &HashSet<JsonPath>,
         path: JsonPath,
         datum: Datum,
         oid: PgOid,
@@ -1008,11 +1008,7 @@ pub struct JsonPath {
 impl JsonPath {
     pub fn parent(&self) -> Option<Self> {
         let mut path = self.path.clone();
-        if let Some(key) = path.pop() {
-            Some(Self { path, key })
-        } else {
-            None
-        }
+        path.pop().map(|key| Self { path, key })
     }
 
     pub fn child<T: ToString>(&self, key: T) -> Self {

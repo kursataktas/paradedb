@@ -137,7 +137,7 @@ pub unsafe fn row_to_search_documents(
     for search_field in &schema.fields {
         let path = JsonPath::from(search_field.name.0.as_ref());
 
-        json_field_lookup.insert(path.clone(), &search_field);
+        json_field_lookup.insert(path.clone(), search_field);
         if search_field.config.is_nested() {
             for path in search_field.config.nested_paths() {
                 nested_lookup.insert(JsonPath::from(path.as_str()));

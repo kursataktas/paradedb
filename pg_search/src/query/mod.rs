@@ -818,7 +818,7 @@ impl SearchQueryInput {
                         query_string: format!(
                             "{}.{}.{}",
                             dbg!(prefix.clone()),
-                            dbg!(idx.clone()),
+                            dbg!(idx),
                             dbg!(query.clone())
                         ),
                         lenient: None,
