@@ -133,5 +133,5 @@ fn explain_row_estimate(mut conn: PgConnection) {
     // depending on how tantivy distributes docs per segment, it seems the estimated rows could be 2 or 3
     // with our little test table
     let plan_rows = plan.get("Plan Rows").unwrap().as_i64().unwrap();
-    assert!(plan_rows > 2, "expected rows greater than 2",);
+    assert!(plan_rows >= 2, "expected rows greater than 2",);
 }
