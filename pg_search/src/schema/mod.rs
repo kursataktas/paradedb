@@ -22,8 +22,8 @@ use anyhow::{Context, Result};
 use derive_more::{AsRef, Display, From, Into};
 pub use document::*;
 use pgrx::{PgBuiltInOids, PgOid, PgRelation};
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{json, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use tantivy::schema::{
@@ -129,7 +129,7 @@ pub enum SearchFieldConfig {
         record: IndexRecordOption,
         #[serde(default)]
         normalizer: SearchNormalizer,
-        #[serde(default, deserialize_with = "string_or_vec")]
+        #[serde(default)]
         nested: Vec<String>,
     },
     Range {
@@ -271,7 +271,19 @@ impl SearchFieldConfig {
             None => Ok(SearchNormalizer::Raw),
         }?;
 
-        let nested = string_or_vec(obj.get("nested").cloned().unwrap_or(Value::Null))?;
+        let nested = match obj.get("nested") {
+            Some(v) => v
+                .as_array()
+                .ok_or_else(|| anyhow::anyhow!("'nested' must be an array of string paths"))?
+                .into_iter()
+                .map(|v| {
+                    v.as_str()
+                        .map(|s| s.to_string())
+                        .ok_or_else(|| anyhow::anyhow!("'nested' paths must be strings"))
+                })
+                .collect::<Result<Vec<String>>>()?,
+            None => vec![],
+        };
 
         Ok(SearchFieldConfig::Json {
             indexed,
@@ -1025,32 +1037,5 @@ mod tests {
 
         let text_options = json_object_options.set_fast(Some("index"));
         assert_ne!(expected.is_fast(), text_options.is_fast());
-    }
-}
-
-pub fn string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    // Deserialize into an optional JSON value first
-    let value = Option::<Value>::deserialize(deserializer)?;
-    // Handle cases for missing, single string, or array
-    match value {
-        None => Ok(vec![]),                    // Key is missing, return an empty Vec
-        Some(Value::String(s)) => Ok(vec![s]), // Single string, wrap in Vec
-        Some(Value::Array(arr)) => {
-            // Map each element in the array to a String if all elements are strings
-            let strings = arr
-                .into_iter()
-                .map(|v| match v {
-                    Value::String(s) => Ok(s),
-                    _ => Err(serde::de::Error::custom("Expected a string")),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(strings)
-        }
-        _ => Err(serde::de::Error::custom(
-            "Expected a string or array of strings",
-        )),
     }
 }
