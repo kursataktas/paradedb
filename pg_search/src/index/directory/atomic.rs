@@ -67,6 +67,26 @@ impl AtomicDirectory {
             );
         }
 
+        // for (i, chunk) in data.chunks(MAX_HEAP_TUPLE_SIZE).enumerate() {
+        //     if i > 0 {
+        //         let special = pg_sys::PageGetSpecialPointer(page) as *mut LinkedBlockSpecialData;
+        //         if (*special).next_blockno == pg_sys::InvalidBlockNumber {
+        //             let new_buffer = cache.new_buffer(size_of::<LinkedBlockSpecialData>());
+        //             (*special).next_blockno = pg_sys::BufferGetBlockNumber(new_buffer);
+        //             pg_sys::MarkBufferDirty(buffer);
+        //             pg_sys::ReleaseBuffer(buffer);
+        //             buffer = new_buffer;
+        //             page = pg_sys::BufferGetPage(buffer);
+        //         } else {
+        //             let next_blockno = (*special).next_blockno;
+        //             pg_sys::ReleaseBuffer(buffer);
+        //             buffer = cache.get_buffer(next_blockno, None);
+        //             page = pg_sys::BufferGetPage(buffer);
+        //         }
+        //     }
+
+        // }
+
         pg_sys::MarkBufferDirty(buffer);
         pg_sys::ReleaseBuffer(buffer);
     }

@@ -2,10 +2,12 @@ use pgrx::*;
 use std::ptr::null_mut;
 
 pub const METADATA_BLOCKNO: pg_sys::BlockNumber = 0; // Stores metadata for the entire index
-pub const SEGMENT_HANDLE_BLOCKNO: pg_sys::BlockNumber = 1; // Stores SegmentHandles
-pub const INDEX_WRITER_LOCK_BLOCKNO: pg_sys::BlockNumber = 2; // Used for Tantivy's INDEX_WRITER_LOCK
-pub const TANTIVY_META_BLOCKNO: pg_sys::BlockNumber = 3; // Used for Tantivy's meta.json
-pub const TANTIVY_MANAGED_BLOCKNO: pg_sys::BlockNumber = 4; // Used for Tantivy's managed.json
+pub const INDEX_WRITER_LOCK_BLOCKNO: pg_sys::BlockNumber = 1; // Used for Tantivy's INDEX_WRITER_LOCK
+pub const META_LOCK_BLOCKNO: pg_sys::BlockNumber = 2; // Used for Tantivy's META_LOCK
+pub const MANAGED_LOCK_BLOCKNO: pg_sys::BlockNumber = 3; // Used for Tantivy's MANAGED_LOCK
+pub const SEGMENT_HANDLE_BLOCKNO: pg_sys::BlockNumber = 4; // Stores SegmentHandles
+pub const TANTIVY_META_BLOCKNO: pg_sys::BlockNumber = 5; // Used for Tantivy's meta.json
+pub const TANTIVY_MANAGED_BLOCKNO: pg_sys::BlockNumber = 6; // Used for Tantivy's managed.json
 
 pub struct MetaPageData {
     pub segment_handle_insert_blockno: pg_sys::BlockNumber,
