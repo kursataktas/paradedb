@@ -114,6 +114,7 @@ fn direct_sql_mix(mut conn: PgConnection) {
 
 #[rstest]
 fn explain_row_estimate(mut conn: PgConnection) {
+    use serde_json::Number;
     use serde_json::Value;
 
     SimpleProductsTable::setup().execute(&mut conn);
@@ -132,6 +133,9 @@ fn explain_row_estimate(mut conn: PgConnection) {
 
     // depending on how tantivy distributes docs per segment, it seems the estimated rows could be 2 or 3
     // with our little test table
-    let plan_rows = plan.get("Plan Rows").unwrap().as_i64().unwrap();
-    assert!(plan_rows >= 2, "expected rows greater than 2",);
+    let plan_rows = plan.get("Plan Rows");
+    assert!(
+        plan_rows == Some(&Value::Number(Number::from(2)))
+            || plan_rows == Some(&Value::Number(Number::from(3)))
+    );
 }
