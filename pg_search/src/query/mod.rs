@@ -120,6 +120,17 @@ pub enum SearchQueryInput {
         lenient: Option<bool>,
         conjunction_mode: Option<bool>,
     },
+    ParseNested {
+        field: String,
+        ordinal: u32,
+        path: Option<String>,
+        #[serde(default)]
+        must: Vec<String>,
+        #[serde(default)]
+        should: Vec<String>,
+        #[serde(default)]
+        must_not: Vec<String>,
+    },
     ParseWithField {
         field: String,
         query_string: String,
@@ -786,6 +797,59 @@ impl SearchQueryInput {
                         )?))
                     }
                 }
+            }
+            Self::ParseNested {
+                field,
+                path,
+                ordinal,
+                must,
+                should,
+                must_not,
+            } => {
+                let to_ordinal_query = |idx: u32| {
+                    // Clone `field` and `path` to use inside the closure
+                    let field = field.clone();
+                    let prefix = if let Some(ref path) = path {
+                        format!("{}.{}", field, path.clone())
+                    } else {
+                        field.clone()
+                    };
+                    move |query: String| Self::Parse {
+                        query_string: format!(
+                            "{}.{}.{}",
+                            dbg!(prefix.clone()),
+                            dbg!(idx.clone()),
+                            dbg!(query.clone())
+                        ),
+                        lenient: None,
+                        conjunction_mode: None,
+                    }
+                };
+
+                let ordinal_queries = (0..ordinal).map(|idx| Self::Boolean {
+                    must: must
+                        .clone()
+                        .into_iter()
+                        .map(to_ordinal_query(idx))
+                        .collect(),
+                    should: should
+                        .clone()
+                        .into_iter()
+                        .map(to_ordinal_query(idx))
+                        .collect(),
+                    must_not: must_not
+                        .clone()
+                        .into_iter()
+                        .map(to_ordinal_query(idx))
+                        .collect(),
+                });
+
+                Self::Boolean {
+                    must: vec![],
+                    should: ordinal_queries.collect(),
+                    must_not: vec![],
+                }
+                .into_tantivy_query(field_lookup, parser, searcher)
             }
             Self::ParseWithField {
                 field,

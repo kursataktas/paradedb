@@ -348,6 +348,25 @@ pub fn parse(
 }
 
 #[pg_extern(immutable, parallel_safe)]
+pub fn parse_nested(
+    field: String,
+    ordinal: i32,
+    path: default!(Option<String>, "NULL"),
+    must: default!(Vec<String>, "ARRAY[]::text[]"),
+    should: default!(Vec<String>, "ARRAY[]::text[]"),
+    must_not: default!(Vec<String>, "ARRAY[]::text[]"),
+) -> SearchQueryInput {
+    SearchQueryInput::ParseNested {
+        field,
+        path,
+        ordinal: ordinal as u32,
+        must,
+        should,
+        must_not,
+    }
+}
+
+#[pg_extern(immutable, parallel_safe)]
 pub fn parse_with_field(
     field: FieldName,
     query_string: String,

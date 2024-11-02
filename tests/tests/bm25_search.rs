@@ -1255,7 +1255,7 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
         table_name => 'customers',
         key_field => 'id',
         text_fields => paradedb.field('name'),
-        json_fields => paradedb.field('crm_data')
+        json_fields => paradedb.field('crm_data', nested => ARRAY['crm_data'])
     );
     "#
     .execute(&mut conn);
@@ -1263,7 +1263,11 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
     // Test search with nested JSON that does not match both conditions within the same object
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
-    FROM customers WHERE id @@@ 'crm_data.interaction:call AND crm_data.details.subject:Goodbye'
+    FROM customers WHERE id @@@ paradedb.parse_nested(
+        field => 'crm_data',
+        ordinal => 10,
+        must => ARRAY['interaction:call', 'details.subject:Goodbye']
+    )
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
@@ -1272,7 +1276,11 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
     // Test search with nested JSON that matches both conditions in the same object
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
-    FROM customers WHERE id @@@ 'crm_data.interaction:email AND crm_data.details.subject:Goodbye'
+    FROM customers WHERE id @@@ paradedb.parse_nested(
+        field => 'crm_data',
+        ordinal => 10,
+        should => ARRAY['interaction:email', 'details.subject:Goodbye']
+    )
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
@@ -1281,13 +1289,30 @@ fn separate_nested_json_docs(mut conn: PgConnection) {
     // Test search with a JSON object that does not match any conditions
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
-    FROM customers WHERE id @@@ 'crm_data.interaction:sms AND crm_data.details.subject:Reminder'
+    FROM customers WHERE id @@@ paradedb.parse_nested(
+        field => 'crm_data',
+        ordinal => 10,
+        must => ARRAY['interaction:sms', 'details.subject:Reminder']
+    )
     ORDER BY score, id DESC;
     "#
     .fetch_collect(&mut conn);
     assert_eq!(rows.len(), 0); // No customers should be found
 
     // Test search with only one condition
+    let rows: Vec<(i32, String)> = r#"
+    SELECT id, name, paradedb.score(id)
+    FROM customers WHERE id @@@ paradedb.parse_nested(
+        field => 'crm_data',
+        ordinal => 10,
+        must => ARRAY['interaction:sms']
+    )
+    ORDER BY score, id DESC;
+    "#
+    .fetch_collect(&mut conn);
+    assert_eq!(rows, vec![(1, "Customer A".to_string())]); // Customer A should be found
+
+    // Test search with only one condition and short syntax
     let rows: Vec<(i32, String)> = r#"
     SELECT id, name, paradedb.score(id)
     FROM customers WHERE id @@@ 'crm_data.interaction:call'

@@ -22,8 +22,8 @@ use anyhow::{Context, Result};
 use derive_more::{AsRef, Display, From, Into};
 pub use document::*;
 use pgrx::{PgBuiltInOids, PgOid, PgRelation};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use tantivy::schema::{
@@ -129,8 +129,8 @@ pub enum SearchFieldConfig {
         record: IndexRecordOption,
         #[serde(default)]
         normalizer: SearchNormalizer,
-        #[serde(default)]
-        nested: bool,
+        #[serde(default, deserialize_with = "string_or_vec")]
+        nested: Vec<String>,
     },
     Range {
         #[serde(default = "default_as_true")]
@@ -271,12 +271,7 @@ impl SearchFieldConfig {
             None => Ok(SearchNormalizer::Raw),
         }?;
 
-        let nested = match obj.get("nested") {
-            Some(v) => v
-                .as_bool()
-                .ok_or_else(|| anyhow::anyhow!("'nested' field should be a boolean")),
-            None => Ok(false),
-        }?;
+        let nested = string_or_vec(obj.get("nested").cloned().unwrap_or(Value::Null))?;
 
         Ok(SearchFieldConfig::Json {
             indexed,
@@ -409,6 +404,28 @@ impl SearchFieldConfig {
     pub fn from_json(value: serde_json::Value) -> Self {
         serde_json::from_value(value)
             .expect("value should be a valid SearchFieldConfig representation")
+    }
+
+    pub fn is_json(&self) -> bool {
+        matches!(self, SearchFieldConfig::Json { .. })
+    }
+
+    pub fn is_ctid(&self) -> bool {
+        matches!(self, SearchFieldConfig::Ctid)
+    }
+
+    pub fn is_nested(&self) -> bool {
+        match self {
+            SearchFieldConfig::Json { nested, .. } => !nested.is_empty(),
+            _ => false,
+        }
+    }
+
+    pub fn nested_paths(&self) -> &Vec<String> {
+        match self {
+            SearchFieldConfig::Json { nested, .. } => nested,
+            _ => panic!("only json field configs can have nested paths"),
+        }
     }
 
     pub fn default_text() -> Self {
@@ -987,7 +1004,8 @@ mod tests {
             "expand_dots": true,
             "type": "default",
             "record": "basic",
-            "normalizer": "raw"
+            "normalizer": "raw",
+            "nested": []
         }"#;
         let config: serde_json::Value = serde_json::from_str(json).unwrap();
         let search_json_option: SearchFieldConfig =
@@ -1007,5 +1025,32 @@ mod tests {
 
         let text_options = json_object_options.set_fast(Some("index"));
         assert_ne!(expected.is_fast(), text_options.is_fast());
+    }
+}
+
+pub fn string_or_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // Deserialize into an optional JSON value first
+    let value = Option::<Value>::deserialize(deserializer)?;
+    // Handle cases for missing, single string, or array
+    match value {
+        None => Ok(vec![]),                    // Key is missing, return an empty Vec
+        Some(Value::String(s)) => Ok(vec![s]), // Single string, wrap in Vec
+        Some(Value::Array(arr)) => {
+            // Map each element in the array to a String if all elements are strings
+            let strings = arr
+                .into_iter()
+                .map(|v| match v {
+                    Value::String(s) => Ok(s),
+                    _ => Err(serde::de::Error::custom("Expected a string")),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(strings)
+        }
+        _ => Err(serde::de::Error::custom(
+            "Expected a string or array of strings",
+        )),
     }
 }

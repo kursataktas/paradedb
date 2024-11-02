@@ -20,9 +20,7 @@ use std::str::FromStr;
 
 use crate::index::IndexError;
 use crate::postgres::types::{JsonPath, TantivyValue};
-use crate::schema::{
-    SearchDocument, SearchField, SearchFieldConfig, SearchFieldId, SearchIndexSchema,
-};
+use crate::schema::{SearchDocument, SearchField, SearchFieldId, SearchIndexSchema};
 use anyhow::{anyhow, Result};
 use chrono::{NaiveDate, NaiveTime};
 use pg_sys::Datum;
@@ -89,6 +87,8 @@ pub unsafe fn row_to_search_documents(
         Null,
     }
 
+    pgrx::log!("ROW TO SEARCH {}", item_pointer_to_u64(ctid));
+
     let ctid_index_value = item_pointer_to_u64(ctid);
 
     // JSON fields require special processing. If a JSON path is configured
@@ -136,13 +136,13 @@ pub unsafe fn row_to_search_documents(
 
     for search_field in &schema.fields {
         let path = JsonPath::from(search_field.name.0.as_ref());
-        let (is_json, is_nested) = match search_field.config {
-            SearchFieldConfig::Json { nested, .. } => (true, nested),
-            _ => (false, false),
-        };
 
         json_field_lookup.insert(path.clone(), &search_field);
-        if is_nested && is_json {
+        if search_field.config.is_nested() {
+            for path in search_field.config.nested_paths() {
+                nested_lookup.insert(JsonPath::from(path.as_str()));
+            }
+
             nested_lookup.insert(path.clone());
         }
     }
@@ -156,16 +156,22 @@ pub unsafe fn row_to_search_documents(
                 | strategy @ MergeStrategy::JsonArray(oid, datum),
             ) => {
                 let path = JsonPath::from(search_field.name.0.as_ref());
+                let field_is_nested = nested_lookup.contains(&path);
                 let path_values = if matches!(strategy, MergeStrategy::JsonArray(_, _)) {
                     let array_datum: Array<Datum> = pgrx::Array::from_datum(*datum, false)
                         .expect("must be able to read json array datum");
                     array_datum
                         .iter()
                         .flatten()
-                        .flat_map(|datum| {
+                        .enumerate()
+                        .flat_map(|(idx, datum)| {
                             TantivyValue::try_from_datum_json(
                                 &nested_lookup,
-                                path.clone(),
+                                if field_is_nested {
+                                    path.child(idx)
+                                } else {
+                                    path.clone()
+                                },
                                 datum,
                                 *oid,
                             )
@@ -178,15 +184,22 @@ pub unsafe fn row_to_search_documents(
                         .expect("must be able to retrieve json values from datum")
                 };
 
-                for (path, value) in path_values {
-                    let key = path.key.clone();
-                    let parent = path.parent().unwrap_or(path);
-                    let is_nested = nested_lookup.contains(&parent);
+                for (json_path, value) in path_values {
+                    let key = json_path.key.clone();
+                    let parent_path = json_path.parent().unwrap_or(json_path);
+                    let field_is_nested = nested_lookup.contains(&parent_path);
 
-                    if is_nested {
+                    if field_is_nested {
                         let parent_search_field = json_field_lookup
-                            .get(&parent)
+                            .get(&parent_path)
                             .expect("search field should exist for json path");
+                        pgrx::log!(
+                            "{:#?}",
+                            (
+                                parent_search_field.id,
+                                OwnedValue::Object(vec![(key.clone(), value.0.clone())])
+                            )
+                        );
                         document.insert(
                             parent_search_field.id,
                             OwnedValue::Object(vec![(key, value.0)]),
@@ -218,12 +231,7 @@ pub unsafe fn row_to_search_documents(
                 // correspond to a Postgres column. The the only valid non-CTID
                 // configuration for a field like this is a nested JSON field.
                 // Check if we have that, othewise it's an error.
-                let is_nested_json = matches!(
-                    search_field.config,
-                    SearchFieldConfig::Json { nested: true, .. }
-                );
-                let is_ctid = matches!(search_field.config, SearchFieldConfig::Ctid);
-                if !(is_nested_json || is_ctid) {
+                if !(search_field.config.is_nested() || search_field.config.is_ctid()) {
                     panic!(
                         "field '{}' skipped datum read, but is not a nested JSON field",
                         search_field.name
