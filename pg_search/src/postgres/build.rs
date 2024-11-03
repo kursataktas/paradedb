@@ -221,7 +221,14 @@ unsafe fn create_metadata(relation_oid: u32) {
     (*special).next_blockno = pg_sys::InvalidBlockNumber;
 
     let tantivy_meta_buffer = cache.new_buffer(std::mem::size_of::<LinkedBlockSpecialData>());
+    let page = pg_sys::BufferGetPage(tantivy_meta_buffer);
+    let special = pg_sys::PageGetSpecialPointer(page) as *mut LinkedBlockSpecialData;
+    (*special).next_blockno = pg_sys::InvalidBlockNumber;
+
     let tantivy_managed_buffer = cache.new_buffer(std::mem::size_of::<LinkedBlockSpecialData>());
+    let page = pg_sys::BufferGetPage(tantivy_managed_buffer);
+    let special = pg_sys::PageGetSpecialPointer(page) as *mut LinkedBlockSpecialData;
+    (*special).next_blockno = pg_sys::InvalidBlockNumber;
 
     assert!(pg_sys::BufferGetBlockNumber(metadata_buffer) == METADATA_BLOCKNO);
     assert!(pg_sys::BufferGetBlockNumber(writer_lock_buffer) == INDEX_WRITER_LOCK_BLOCKNO);
