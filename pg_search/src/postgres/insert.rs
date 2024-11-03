@@ -61,21 +61,7 @@ impl Drop for InsertState {
                 }
 
                 if pg_sys::IsAbortedTransactionBlockState() || self.abort_on_drop {
-                    if let Err(e) = self
-                        .writer
-                        .take()
-                        .expect("writer should not be null")
-                        .abort()
-                    {
-                        if pg_sys::IsAbortedTransactionBlockState() {
-                            // we're in an aborted state, so the best we can do is warn that our
-                            // attempt to abort the tantivy changes failed
-                            pgrx::warning!("failed to abort tantivy index changes: {}", e);
-                        } else {
-                            // haven't aborted yet so we can raise the error we got during abort
-                            panic!("{e}")
-                        }
-                    }
+                    let _ = self.writer.take().expect("writer should not be null");
                 }
             });
         }

@@ -22,6 +22,7 @@ impl SegmentHandle {
         let mut blockno = SEGMENT_HANDLE_BLOCKNO;
         let mut buffer = cache.get_buffer(blockno, Some(pg_sys::BUFFER_LOCK_SHARE));
 
+        // TODO: Cache SegmentHandles in memory
         while blockno != pg_sys::InvalidBlockNumber {
             let page = pg_sys::BufferGetPage(buffer);
             let mut offsetno = pg_sys::FirstOffsetNumber;

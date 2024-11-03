@@ -38,6 +38,7 @@ pub struct SearchIndexWriter {
     pub underlying_writer: SegmentWriter,
     pub current_opstamp: tantivy::Opstamp,
     pub wants_merge: bool,
+    pub commit_opstamp: tantivy::Opstamp,
     pub segment: tantivy::Segment,
 }
 
@@ -51,6 +52,7 @@ impl SearchIndexWriter {
         Ok(Self {
             underlying_writer,
             current_opstamp,
+            commit_opstamp: current_opstamp,
             segment,
         })
     }
@@ -89,11 +91,6 @@ impl SearchIndexWriter {
             .directory()
             .atomic_write(*META_FILEPATH, &serde_json::to_vec(&new_meta)?)?;
 
-        Ok(())
-    }
-
-    pub fn abort(self) -> Result<()> {
-        // TODO: Implement rollback
         Ok(())
     }
 
