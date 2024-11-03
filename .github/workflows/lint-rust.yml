@@ -38,7 +38,7 @@ jobs:
         id: pgrx
         working-directory: pg_search/
         run: |
-          version=$(cargo tree --depth 1 -i pgrx -p pg_search | head -n 1 | cut -f2 -dv | sed 's/([^)]*)//g' | xargs)
+          version=$(cargo tree --depth 1 -i pgrx -p pg_search | head -n 1 | awk '{print $2}')
           echo "version=$version" >> $GITHUB_OUTPUT
 
       # Caches from base branches are available to PRs, but not across unrelated branches, so we only
