@@ -3005,7 +3005,7 @@ dependencies = [
 [[package]]
 name = "pgrx"
 version = "0.12.7"
-source = "git+https://github.com/paradedb/pgrx.git?rev=6ca2df8#6ca2df85d237110e22468761db328149114242d3"
+source = "git+https://github.com/paradedb/pgrx.git?rev=f251f1e#f251f1e24ee8c0f8d7ef40e1e4e03cd021a25204"
 dependencies = [
  "atomic-traits",
  "bitflags 2.6.0",
@@ -3028,7 +3028,7 @@ dependencies = [
 [[package]]
 name = "pgrx-bindgen"
 version = "0.12.7"
-source = "git+https://github.com/paradedb/pgrx.git?rev=6ca2df8#6ca2df85d237110e22468761db328149114242d3"
+source = "git+https://github.com/paradedb/pgrx.git?rev=f251f1e#f251f1e24ee8c0f8d7ef40e1e4e03cd021a25204"
 dependencies = [
  "bindgen 0.70.1",
  "cc",
@@ -3045,7 +3045,7 @@ dependencies = [
 [[package]]
 name = "pgrx-macros"
 version = "0.12.7"
-source = "git+https://github.com/paradedb/pgrx.git?rev=6ca2df8#6ca2df85d237110e22468761db328149114242d3"
+source = "git+https://github.com/paradedb/pgrx.git?rev=f251f1e#f251f1e24ee8c0f8d7ef40e1e4e03cd021a25204"
 dependencies = [
  "pgrx-sql-entity-graph",
  "proc-macro2",
@@ -3056,7 +3056,7 @@ dependencies = [
 [[package]]
 name = "pgrx-pg-config"
 version = "0.12.7"
-source = "git+https://github.com/paradedb/pgrx.git?rev=6ca2df8#6ca2df85d237110e22468761db328149114242d3"
+source = "git+https://github.com/paradedb/pgrx.git?rev=f251f1e#f251f1e24ee8c0f8d7ef40e1e4e03cd021a25204"
 dependencies = [
  "cargo_toml",
  "eyre",
@@ -3073,7 +3073,7 @@ dependencies = [
 [[package]]
 name = "pgrx-pg-sys"
 version = "0.12.7"
-source = "git+https://github.com/paradedb/pgrx.git?rev=6ca2df8#6ca2df85d237110e22468761db328149114242d3"
+source = "git+https://github.com/paradedb/pgrx.git?rev=f251f1e#f251f1e24ee8c0f8d7ef40e1e4e03cd021a25204"
 dependencies = [
  "cee-scape",
  "libc",
@@ -3087,7 +3087,7 @@ dependencies = [
 [[package]]
 name = "pgrx-sql-entity-graph"
 version = "0.12.7"
-source = "git+https://github.com/paradedb/pgrx.git?rev=6ca2df8#6ca2df85d237110e22468761db328149114242d3"
+source = "git+https://github.com/paradedb/pgrx.git?rev=f251f1e#f251f1e24ee8c0f8d7ef40e1e4e03cd021a25204"
 dependencies = [
  "convert_case 0.6.0",
  "eyre",
