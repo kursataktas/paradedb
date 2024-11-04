@@ -20,7 +20,6 @@ use crate::index::channel::{
     ChannelDirectory, ChannelRequest, ChannelRequestHandler, ChannelResponse,
 };
 use crate::index::WriterResources;
-use crate::postgres::index::open_search_index;
 use crate::postgres::options::SearchIndexCreateOptions;
 use pgrx::*;
 use tantivy::index::Index;

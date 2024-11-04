@@ -18,8 +18,6 @@
 use super::reader::index::SearchIndexReader;
 use super::writer::index::IndexError;
 use crate::gucs;
-use crate::index::directory::blocking::BlockingDirectory;
-use crate::index::merge_policy::NPlusOneMergePolicy;
 use crate::index::writer::index::SearchIndexWriter;
 use crate::postgres::options::SearchIndexCreateOptions;
 use crate::query::SearchQueryInput;
@@ -32,9 +30,6 @@ use once_cell::sync::Lazy;
 use pgrx::PgRelation;
 use serde::Serialize;
 use std::num::NonZeroUsize;
-use tantivy::indexer::NoMergePolicy;
-use tantivy::indexer::SegmentWriter;
-use tantivy::merge_policy::MergePolicy;
 use tantivy::query::Query;
 use tantivy::{query::QueryParser, Executor, Index};
 use thiserror::Error;

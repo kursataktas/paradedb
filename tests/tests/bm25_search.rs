@@ -490,12 +490,16 @@ fn update_non_indexed_column(mut conn: PgConnection) -> Result<()> {
     )"
     .execute(&mut conn);
 
-    let page_size_before: (i64,) = "SELECT pg_relation_size('search_idx') / current_setting('block_size')::int AS page_count".fetch_one(&mut conn);
+    let page_size_before: (i64,) =
+        "SELECT pg_relation_size('search_idx') / current_setting('block_size')::int AS page_count"
+            .fetch_one(&mut conn);
     // Update a non-indexed column.
     "UPDATE mock_items set category = 'Books' WHERE description = 'Sleek running shoes'"
         .execute(&mut conn);
 
-    let page_size_after: (i64,) = "SELECT pg_relation_size('search_idx') / current_setting('block_size')::int AS page_count".fetch_one(&mut conn);
+    let page_size_after: (i64,) =
+        "SELECT pg_relation_size('search_idx') / current_setting('block_size')::int AS page_count"
+            .fetch_one(&mut conn);
     // The total page count should not have changed when updating a non-indexed column.
     assert_eq!(page_size_before, page_size_after);
 
