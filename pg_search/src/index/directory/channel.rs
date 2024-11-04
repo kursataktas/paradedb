@@ -236,10 +236,7 @@ impl ChannelRequestHandler {
         for message in self.receiver.iter() {
             match message {
                 ChannelRequest::AcquireLock(lock) => {
-                    eprintln!("channel acquire_lock {:?}", lock);
-                    let now = std::time::Instant::now();
-                    let blocking_lock =
-                        unsafe { self.directory.acquire_blocking_lock(&lock, now)? };
+                    let blocking_lock = unsafe { self.directory.acquire_blocking_lock(&lock)? };
                     self.sender
                         .send(ChannelResponse::AcquiredLock(blocking_lock))?;
                 }

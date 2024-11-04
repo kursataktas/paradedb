@@ -52,24 +52,18 @@ pub struct BlockingDirectory {
 #[derive(Debug)]
 pub struct BlockingLock {
     buffer: pg_sys::Buffer,
-    now: std::time::Instant,
 }
 
 impl BlockingLock {
-    pub unsafe fn new(
-        relation_oid: u32,
-        blockno: pg_sys::BlockNumber,
-        now: std::time::Instant,
-    ) -> Self {
+    pub unsafe fn new(relation_oid: u32, blockno: pg_sys::BlockNumber) -> Self {
         let cache = BufferCache::open(relation_oid);
         let buffer = cache.get_buffer(blockno, Some(pg_sys::BUFFER_LOCK_EXCLUSIVE));
-        Self { buffer, now }
+        Self { buffer }
     }
 }
 
 impl Drop for BlockingLock {
     fn drop(&mut self) {
-        eprintln!("dropping lock {:?}", self.now);
         unsafe { pg_sys::UnlockReleaseBuffer(self.buffer) };
     }
 }
@@ -79,11 +73,7 @@ impl BlockingDirectory {
         Self { relation_oid }
     }
 
-    pub unsafe fn acquire_blocking_lock(
-        &self,
-        lock: &Lock,
-        now: std::time::Instant,
-    ) -> Result<BlockingLock> {
+    pub unsafe fn acquire_blocking_lock(&self, lock: &Lock) -> Result<BlockingLock> {
         let blockno = if lock.filepath == META_LOCK.filepath {
             META_LOCK_BLOCKNO
         } else if lock.filepath == MANAGED_LOCK.filepath {
@@ -94,7 +84,7 @@ impl BlockingDirectory {
             bail!("acquire_lock unexpected lock {:?}", lock)
         };
 
-        Ok(BlockingLock::new(self.relation_oid, blockno, now))
+        Ok(BlockingLock::new(self.relation_oid, blockno))
     }
 
     /// ambulkdelete wants to know how many pages were deleted, but the Directory trait doesn't let delete
@@ -201,13 +191,10 @@ impl Directory for BlockingDirectory {
     }
 
     fn acquire_lock(&self, lock: &Lock) -> result::Result<DirectoryLock, LockError> {
-        let now = std::time::Instant::now();
-        eprintln!("acquire_lock {:?}", now);
         let blocking_lock = unsafe {
-            self.acquire_blocking_lock(lock, now)
+            self.acquire_blocking_lock(lock)
                 .expect("acquire blocking lock should succeed")
         };
-        eprintln!("lock acquired for {:?}", now);
         Ok(DirectoryLock::from(Box::new(blocking_lock)))
     }
 

@@ -42,21 +42,21 @@ jobs:
     strategy:
       matrix:
         include:
-          # - runner: ubicloud-standard-8
-          #   pg_version: 13
-          #   arch: amd64
-          # - runner: ubicloud-standard-8
-          #   pg_version: 14
-          #   arch: amd64
-          # - runner: ubicloud-standard-8
-          #   pg_version: 15
-          #   arch: amd64
-          - runner: ubuntu-latest
+          - runner: ubicloud-standard-8
+            pg_version: 13
+            arch: amd64
+          - runner: ubicloud-standard-8
+            pg_version: 14
+            arch: amd64
+          - runner: ubicloud-standard-8
+            pg_version: 15
+            arch: amd64
+          - runner: ubicloud-standard-8
             pg_version: 16
             arch: amd64
-          # - runner: ubicloud-standard-8
-          #   pg_version: 17
-          #   arch: amd64
+          - runner: ubicloud-standard-8
+            pg_version: 17
+            arch: amd64
     env:
       default_pg_version: 17
 
@@ -164,9 +164,6 @@ jobs:
           RUST_BACKTRACE=1 cargo pgrx start pg${{ matrix.pg_version }}
           # Necessary for the ephemeral Postgres test to have proper permissions
           sudo chown -R $(whoami) /var/run/postgresql/
-
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
 
       - name: Run pg_search test suite
         if: steps.check_skip.outputs.skip_remaining_steps != 'true'

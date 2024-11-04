@@ -32,7 +32,6 @@ impl AtomicDirectory {
     }
 
     unsafe fn read_bytes(&self, blockno: pg_sys::BlockNumber) -> Vec<u8> {
-        eprintln!("atomic read_bytes start");
         let cache = BufferCache::open(self.relation_oid);
         let mut current_blockno = blockno;
         let mut data = Vec::new();
@@ -89,22 +88,6 @@ impl AtomicDirectory {
                 pg_sys::FirstOffsetNumber,
                 0,
             );
-            // if pg_sys::PageGetMaxOffsetNumber(page) == pg_sys::InvalidOffsetNumber {
-            //     pg_sys::PageAddItemExtended(
-            //         page,
-            //         chunk.as_ptr() as pg_sys::Item,
-            //         chunk.len(),
-            //         pg_sys::FirstOffsetNumber,
-            //         0,
-            //     );
-            // } else {
-            //     pg_sys::PageIndexTupleOverwrite(
-            //         page,
-            //         pg_sys::FirstOffsetNumber,
-            //         chunk.as_ptr() as pg_sys::Item,
-            //         chunk.len(),
-            //     );
-            // }
         }
 
         pg_sys::MarkBufferDirty(buffer);
