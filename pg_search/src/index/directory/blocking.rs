@@ -191,10 +191,12 @@ impl Directory for BlockingDirectory {
     }
 
     fn acquire_lock(&self, lock: &Lock) -> result::Result<DirectoryLock, LockError> {
+        eprintln!("acquire_lock {:?}", lock);
         let blocking_lock = unsafe {
             self.acquire_blocking_lock(lock)
                 .expect("acquire blocking lock should succeed")
         };
+        eprintln!("acquire_lock {:?} done", lock);
         Ok(DirectoryLock::from(Box::new(blocking_lock)))
     }
 
