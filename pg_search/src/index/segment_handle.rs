@@ -98,6 +98,8 @@ impl SegmentHandle {
             pg_sys::UnlockReleaseBuffer(insert_buffer);
 
             let new_page = pg_sys::BufferGetPage(new_buffer);
+            let special = pg_sys::PageGetSpecialPointer(new_page) as *mut LinkedBlockSpecialData;
+            (*special).next_blockno = pg_sys::InvalidBlockNumber;
 
             if pg_sys::PageAddItemExtended(
                 new_page,

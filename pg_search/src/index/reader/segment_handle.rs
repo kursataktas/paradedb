@@ -28,7 +28,6 @@ impl SegmentHandleReader {
 
 impl FileHandle for SegmentHandleReader {
     fn read_bytes(&self, range: Range<usize>) -> Result<OwnedBytes, Error> {
-        eprintln!("read_bytes start");
         unsafe {
             const MAX_HEAP_TUPLE_SIZE: usize = unsafe { max_heap_tuple_size() };
             let cache = BufferCache::open(self.relation_oid);

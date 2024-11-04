@@ -230,6 +230,11 @@ unsafe fn create_metadata(relation_oid: u32) {
     let special = pg_sys::PageGetSpecialPointer(page) as *mut LinkedBlockSpecialData;
     (*special).next_blockno = pg_sys::InvalidBlockNumber;
 
+    eprintln!(
+        "setting next blockno in create_meta: {}",
+        (*special).next_blockno
+    );
+
     assert!(pg_sys::BufferGetBlockNumber(metadata_buffer) == METADATA_BLOCKNO);
     assert!(pg_sys::BufferGetBlockNumber(writer_lock_buffer) == INDEX_WRITER_LOCK_BLOCKNO);
     assert!(pg_sys::BufferGetBlockNumber(meta_lock_buffer) == META_LOCK_BLOCKNO);
