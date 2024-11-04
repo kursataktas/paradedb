@@ -15,10 +15,16 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
+use crate::index::blocking::BlockingDirectory;
+use crate::index::channel::{
+    ChannelDirectory, ChannelRequest, ChannelRequestHandler, ChannelResponse,
+};
 use crate::index::WriterResources;
 use crate::postgres::index::open_search_index;
 use crate::postgres::options::SearchIndexCreateOptions;
 use pgrx::*;
+use tantivy::index::Index;
+use tantivy::IndexWriter;
 
 #[pg_guard]
 pub extern "C" fn amvacuumcleanup(
@@ -33,6 +39,9 @@ pub extern "C" fn amvacuumcleanup(
     let needs_merge = stats.is_null() || unsafe { (*stats).pages_deleted == 0 };
     let index_relation = unsafe { PgRelation::from_pg(info.index) };
     let index_oid: u32 = index_relation.oid().into();
+    let options = index_relation.rd_options as *mut SearchIndexCreateOptions;
+    let (parallelism, memory_budget, _, _) =
+        WriterResources::Vacuum.resources(unsafe { options.as_ref().unwrap() });
     let (request_sender, request_receiver) = crossbeam::channel::unbounded::<ChannelRequest>();
     let (response_sender, response_receiver) = crossbeam::channel::unbounded::<ChannelResponse>();
     let request_sender_clone = request_sender.clone();
@@ -42,7 +51,6 @@ pub extern "C" fn amvacuumcleanup(
             let channel_directory =
                 ChannelDirectory::new(request_sender.clone(), response_receiver.clone());
             let channel_index = Index::open(channel_directory).expect("channel index should open");
-            let (parallelism, memory_budget) = WriterResources::Vacuum.resources();
             let mut writer: IndexWriter = channel_index
                 .writer_with_num_threads(parallelism.into(), memory_budget)
                 .unwrap();

@@ -92,9 +92,10 @@ pub unsafe fn init_insert_state(
 ) -> *mut InsertState {
     assert!(!index_info.is_null());
     let state = (*index_info).ii_AmCache;
+    let index_relation = PgRelation::from_pg(index_relation);
     if state.is_null() {
         // we don't have any cached state yet, so create it now
-        let state = InsertState::new(index_relation, writer_resources)
+        let state = InsertState::new(&index_relation, writer_resources)
             .expect("should be able to open new SearchIndex for writing");
 
         // leak it into the MemoryContext for this scan (as specified by the IndexInfo argument)

@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
+use crate::postgres::options::SearchIndexCreateOptions;
 use crate::{
     index::SearchIndex,
     postgres::types::TantivyValueError,
@@ -43,8 +44,12 @@ pub struct SearchIndexWriter {
 }
 
 impl SearchIndexWriter {
-    pub fn new(index: Index, resources: WriterResources) -> Result<Self> {
-        let (_, memory_budget) = resources.resources();
+    pub fn new(
+        index: Index,
+        resources: WriterResources,
+        index_options: &SearchIndexCreateOptions,
+    ) -> Result<Self> {
+        let (_, memory_budget, _, _) = resources.resources(index_options);
         let segment = index.new_segment();
         let current_opstamp = index.load_metas()?.opstamp;
         let underlying_writer = SegmentWriter::for_segment(memory_budget, segment.clone())?;
@@ -53,6 +58,8 @@ impl SearchIndexWriter {
             underlying_writer,
             current_opstamp,
             commit_opstamp: current_opstamp,
+            // TODO: Merge on insert
+            wants_merge: false,
             segment,
         })
     }

@@ -21,6 +21,7 @@ use crate::index::directory::channel::{
 };
 use crate::index::fast_fields_helper::FFType;
 use crate::index::WriterResources;
+use crate::postgres::options::SearchIndexCreateOptions;
 use pgrx::{pg_sys::ItemPointerData, *};
 use tantivy::index::Index;
 use tantivy::indexer::IndexWriter;
@@ -36,6 +37,9 @@ pub extern "C" fn ambulkdelete(
     let mut stats = unsafe { PgBox::from_pg(stats) };
     let index_relation = unsafe { PgRelation::from_pg(info.index) };
     let index_oid: u32 = index_relation.oid().into();
+    let options = index_relation.rd_options as *mut SearchIndexCreateOptions;
+    let (parallelism, memory_budget, _, _) =
+        WriterResources::Vacuum.resources(unsafe { options.as_ref().unwrap() });
     let (request_sender, request_receiver) = crossbeam::channel::unbounded::<ChannelRequest>();
     let (response_sender, response_receiver) = crossbeam::channel::unbounded::<ChannelResponse>();
     let request_sender_clone = request_sender.clone();
@@ -50,7 +54,6 @@ pub extern "C" fn ambulkdelete(
                 .reload_policy(tantivy::ReloadPolicy::Manual)
                 .try_into()
                 .unwrap();
-            let (parallelism, memory_budget) = WriterResources::Vacuum.resources();
             let mut writer: IndexWriter = channel_index
                 .writer_with_num_threads(parallelism.into(), memory_budget)
                 .unwrap();

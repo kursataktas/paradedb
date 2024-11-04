@@ -1641,7 +1641,7 @@ fn autocomplete(mut conn: PgConnection) {
     assert_eq!(rows, expected);
 
     r#"
-    DROP INDEX search_idx_bm25_index CASCADE;
+    DROP INDEX search_idx CASCADE;
     CALL paradedb.create_bm25(
         index_name => 'ngrams_idx',
         schema_name => 'public',

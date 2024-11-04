@@ -18,11 +18,9 @@
 use super::reader::index::SearchIndexReader;
 use super::writer::index::IndexError;
 use crate::gucs;
+use crate::index::directory::blocking::BlockingDirectory;
 use crate::index::merge_policy::NPlusOneMergePolicy;
-use crate::index::SearchIndexWriter;
-use crate::index::{
-    BlockingDirectory, SearchDirectoryError, SearchFs, TantivyDirPath, WriterDirectory,
-};
+use crate::index::writer::index::SearchIndexWriter;
 use crate::postgres::options::SearchIndexCreateOptions;
 use crate::query::SearchQueryInput;
 use crate::schema::{
@@ -35,8 +33,8 @@ use pgrx::PgRelation;
 use serde::Serialize;
 use std::num::NonZeroUsize;
 use tantivy::indexer::NoMergePolicy;
-use tantivy::merge_policy::MergePolicy;
 use tantivy::indexer::SegmentWriter;
+use tantivy::merge_policy::MergePolicy;
 use tantivy::query::Query;
 use tantivy::{query::QueryParser, Executor, Index};
 use thiserror::Error;
@@ -114,15 +112,7 @@ impl SearchIndex {
         resources: WriterResources,
         index_options: &SearchIndexCreateOptions,
     ) -> Result<SearchIndexWriter> {
-        let (_, memory_budget) = resources.resources();
-        let segment = self.underlying_index.new_segment();
-        let writer = SegmentWriter::for_segment(memory_budget, segment.clone())?;
-        let current_opstamp = self.underlying_index.load_metas()?.opstamp;
-
-        Ok(SearchIndexWriter {
-            underlying_writer: Some(writer),
-            current_opstamp,
-        })
+        SearchIndexWriter::new(self.underlying_index.clone(), resources, index_options)
     }
 
     #[allow(static_mut_refs)]
