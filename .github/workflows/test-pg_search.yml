@@ -165,8 +165,8 @@ jobs:
           # Necessary for the ephemeral Postgres test to have proper permissions
           sudo chown -R $(whoami) /var/run/postgresql/
 
-      - name: Setup upterm session
-        uses: lhotari/action-upterm@v1
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
 
       - name: Run pg_search test suite
         if: steps.check_skip.outputs.skip_remaining_steps != 'true'
